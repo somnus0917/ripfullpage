@@ -11,6 +11,8 @@
   const CAPTURE_DELAY_MS = 300;
   const TILE_OVERLAP_CSS_PX = 120;
   const SEAM_OVERWRITE_CSS_PX = 10;
+  const MAX_DEFAULT_FULL_PAGE_TILES = 50;
+  const MAX_DEFAULT_FULL_PAGE_HEIGHT = 30000;
   const MIN_SELECTION_SIZE = 4;
   let activeToast = null;
 
@@ -47,16 +49,34 @@
       document.documentElement.style.scrollBehavior;
     const pageSize = getPageSize(scrollTarget);
     const viewport = getViewportSize();
-    const xPositions = buildScrollPositions(
+    let capturePageSize = { ...pageSize };
+    let xPositions = buildScrollPositions(
       pageSize.width,
       viewport.width,
       TILE_OVERLAP_CSS_PX,
     );
-    const yPositions = buildScrollPositions(
+    let yPositions = buildScrollPositions(
       pageSize.height,
       viewport.height,
       TILE_OVERLAP_CSS_PX,
     );
+    const capturePlan = await confirmLargeCaptureIfNeeded(
+      pageSize,
+      viewport,
+      xPositions,
+      yPositions,
+    );
+
+    if (capturePlan.action === "cancel") {
+      return;
+    }
+
+    if (capturePlan.action === "limit") {
+      capturePageSize = capturePlan.pageSize;
+      xPositions = capturePlan.xPositions;
+      yPositions = capturePlan.yPositions;
+    }
+
     const tileGrid = [];
     const totalTiles = xPositions.length * yPositions.length;
     let capturedTiles = 0;
@@ -103,7 +123,7 @@
       showToast("正在拼接截图...");
       const stitchedDataURL = stitchTiles(
         tileGrid,
-        pageSize,
+        capturePageSize,
         viewport,
         scaleX,
         scaleY,
@@ -115,6 +135,93 @@
       document.documentElement.style.scrollBehavior = originalScrollBehavior;
       document.documentElement.classList.remove("ripfullpage-capturing");
     }
+  }
+
+  async function confirmLargeCaptureIfNeeded(
+    pageSize,
+    viewport,
+    xPositions,
+    yPositions,
+  ) {
+    const totalTiles = xPositions.length * yPositions.length;
+
+    if (
+      totalTiles <= MAX_DEFAULT_FULL_PAGE_TILES &&
+      pageSize.height <= MAX_DEFAULT_FULL_PAGE_HEIGHT
+    ) {
+      return {
+        action: "full",
+        pageSize,
+        xPositions,
+        yPositions,
+      };
+    }
+
+    const limitedPlan = buildLimitedCapturePlan(pageSize, viewport);
+    const choice = await showLargeCaptureDialog({
+      totalTiles,
+      pageHeight: pageSize.height,
+      limitedTiles: limitedPlan.xPositions.length * limitedPlan.yPositions.length,
+      limitedHeight: limitedPlan.pageSize.height,
+    });
+
+    if (choice === "full") {
+      return {
+        action: "full",
+        pageSize,
+        xPositions,
+        yPositions,
+      };
+    }
+
+    if (choice === "limit") {
+      return {
+        action: "limit",
+        ...limitedPlan,
+      };
+    }
+
+    return {
+      action: "cancel",
+      pageSize,
+      xPositions,
+      yPositions,
+    };
+  }
+
+  function buildLimitedCapturePlan(pageSize, viewport) {
+    const limitedPageSize = {
+      width: pageSize.width,
+      height: Math.min(pageSize.height, MAX_DEFAULT_FULL_PAGE_HEIGHT),
+    };
+    const xPositions = buildScrollPositions(
+      limitedPageSize.width,
+      viewport.width,
+      TILE_OVERLAP_CSS_PX,
+    );
+    let yPositions = buildScrollPositions(
+      limitedPageSize.height,
+      viewport.height,
+      TILE_OVERLAP_CSS_PX,
+    );
+    const maxRows = Math.max(
+      1,
+      Math.floor(MAX_DEFAULT_FULL_PAGE_TILES / xPositions.length),
+    );
+
+    if (yPositions.length > maxRows) {
+      yPositions = yPositions.slice(0, maxRows);
+      limitedPageSize.height = Math.min(
+        limitedPageSize.height,
+        yPositions[yPositions.length - 1] + viewport.height,
+      );
+    }
+
+    return {
+      pageSize: limitedPageSize,
+      xPositions,
+      yPositions,
+    };
   }
 
   async function startCustomAreaCapture() {
@@ -383,6 +490,60 @@
       0,
       Math.min(viewportHeight - 1, overlap - SEAM_OVERWRITE_CSS_PX),
     );
+  }
+
+  function showLargeCaptureDialog(details) {
+    return new Promise((resolve) => {
+      const overlay = document.createElement("div");
+      const dialog = document.createElement("div");
+      const title = document.createElement("h2");
+      const message = document.createElement("p");
+      const meta = document.createElement("p");
+      const actions = document.createElement("div");
+      const limitButton = document.createElement("button");
+      const fullButton = document.createElement("button");
+      const cancelButton = document.createElement("button");
+
+      overlay.className = "ripfullpage-dialog-overlay";
+      dialog.className = "ripfullpage-dialog";
+      actions.className = "ripfullpage-dialog-actions";
+      limitButton.className = "ripfullpage-dialog-button ripfullpage-dialog-primary";
+      fullButton.className = "ripfullpage-dialog-button";
+      cancelButton.className = "ripfullpage-dialog-button";
+
+      title.textContent = "页面过长";
+      message.textContent =
+        "这个页面可能是无限滚动或超长页面，完整截图容易卡住或占用大量内存。";
+      meta.textContent =
+        `预计 ${details.totalTiles} 张分块，页面高度 ${details.pageHeight}px。` +
+        ` 推荐限制为 ${details.limitedTiles} 张分块，约 ${details.limitedHeight}px。`;
+      limitButton.textContent = "限制截图";
+      fullButton.textContent = "继续完整截图";
+      cancelButton.textContent = "取消";
+
+      const cleanup = (choice) => {
+        document.removeEventListener("keydown", onKeyDown, true);
+        overlay.remove();
+        resolve(choice);
+      };
+      const onKeyDown = (event) => {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          cleanup("cancel");
+        }
+      };
+
+      limitButton.addEventListener("click", () => cleanup("limit"));
+      fullButton.addEventListener("click", () => cleanup("full"));
+      cancelButton.addEventListener("click", () => cleanup("cancel"));
+      document.addEventListener("keydown", onKeyDown, true);
+
+      actions.append(limitButton, fullButton, cancelButton);
+      dialog.append(title, message, meta, actions);
+      overlay.append(dialog);
+      document.documentElement.appendChild(overlay);
+      limitButton.focus();
+    });
   }
 
   function selectArea() {

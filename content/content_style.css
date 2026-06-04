@@ -56,6 +56,74 @@
   color: #fecaca;
 }
 
+.ripfullpage-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(3, 7, 18, 0.62);
+}
+
+.ripfullpage-dialog {
+  box-sizing: border-box;
+  width: min(430px, 100%);
+  padding: 18px;
+  border: 1px solid rgba(148, 163, 184, 0.32);
+  border-radius: 8px;
+  background: #0f172a;
+  color: #f8fafc;
+  box-shadow: 0 22px 56px rgba(0, 0, 0, 0.45);
+  font: 13px/1.5 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.ripfullpage-dialog h2 {
+  margin: 0 0 8px;
+  color: #f8fafc;
+  font-size: 17px;
+  line-height: 1.25;
+  letter-spacing: 0;
+}
+
+.ripfullpage-dialog p {
+  margin: 8px 0 0;
+  color: #cbd5e1;
+}
+
+.ripfullpage-dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+.ripfullpage-dialog-button {
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 7px;
+  background: #111827;
+  color: #f8fafc;
+  font: inherit;
+  cursor: pointer;
+}
+
+.ripfullpage-dialog-button:hover {
+  border-color: rgba(96, 165, 250, 0.72);
+  background: #172033;
+}
+
+.ripfullpage-dialog-primary {
+  border-color: rgba(96, 165, 250, 0.78);
+  background: #1d4ed8;
+}
+
+.ripfullpage-dialog-primary:hover {
+  background: #2563eb;
+}
+
 html.ripfullpage-capturing,
 html.ripfullpage-capturing body {
   scrollbar-width: none !important;
