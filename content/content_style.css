@@ -72,13 +72,16 @@ html.ripfullpage-capturing [id*="immersive" i],
 html.ripfullpage-capturing [class*="immersive" i],
 html.ripfullpage-capturing [id*="immersive-translate" i],
 html.ripfullpage-capturing [class*="immersive-translate" i],
-html.ripfullpage-capturing [id*="translate" i],
-html.ripfullpage-capturing [class*="translate" i],
-html.ripfullpage-capturing [aria-label*="translate" i],
-html.ripfullpage-capturing [title*="translate" i],
 html.ripfullpage-capturing iframe[src*="chrome-extension:" i],
 html.ripfullpage-capturing iframe[src*="immersive" i],
-html.ripfullpage-capturing iframe[src*="translate" i] {
+html.ripfullpage-capturing iframe[src*="doubleclick" i],
+html.ripfullpage-capturing iframe[src*="googlesyndication" i],
+html.ripfullpage-capturing iframe[src*="carbonads" i],
+html.ripfullpage-capturing iframe[src*="retool" i],
+html.ripfullpage-capturing [data-testid*="ad" i],
+html.ripfullpage-capturing [data-ad-client],
+html.ripfullpage-capturing [data-ad-slot],
+html.ripfullpage-capturing [aria-label="advertisement" i] {
   display: none !important;
   visibility: hidden !important;
 }
