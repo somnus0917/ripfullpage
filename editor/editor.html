@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ripfullpage Editor</title>
+    <link rel="stylesheet" href="editor.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="toolbar">
+        <div class="brand">
+          <img src="../icons/icon48.png" alt="" class="brand-icon">
+          <div>
+            <h1>ripfullpage</h1>
+            <p id="imageMeta">正在载入截图...</p>
+          </div>
+        </div>
+
+        <div class="toolbar-actions" aria-label="编辑操作">
+          <button id="applyCropButton" class="button primary" type="button">确认裁剪</button>
+          <button id="resetButton" class="button" type="button">重置</button>
+          <button id="downloadButton" class="button" type="button">下载 PNG</button>
+        </div>
+      </header>
+
+      <section class="workspace" aria-label="截图预览">
+        <div id="stage" class="stage">
+          <div id="imageWrap" class="image-wrap">
+            <img id="previewImage" alt="截图预览">
+            <div id="cropBox" class="crop-box" hidden>
+              <span class="handle handle-n" data-handle="n"></span>
+              <span class="handle handle-ne" data-handle="ne"></span>
+              <span class="handle handle-e" data-handle="e"></span>
+              <span class="handle handle-se" data-handle="se"></span>
+              <span class="handle handle-s" data-handle="s"></span>
+              <span class="handle handle-sw" data-handle="sw"></span>
+              <span class="handle handle-w" data-handle="w"></span>
+              <span class="handle handle-nw" data-handle="nw"></span>
+              <span id="cropSize" class="crop-size"></span>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script src="editor.js"></script>
+  </body>
+</html>

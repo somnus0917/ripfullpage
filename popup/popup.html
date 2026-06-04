@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ripfullpage</title>
+    <link rel="stylesheet" href="popup.css">
+  </head>
+  <body>
+    <main class="popup-shell">
+      <header class="popup-header">
+        <img src="../icons/icon48.png" alt="" class="popup-logo">
+        <div>
+          <h1>ripfullpage</h1>
+          <p>Screenshot tool</p>
+        </div>
+      </header>
+
+      <section class="actions" aria-label="截图操作">
+        <button id="fullPageButton" class="action-button" type="button">
+          <span class="button-icon" aria-hidden="true">⌁</span>
+          <span>全页截图</span>
+        </button>
+        <button id="customAreaButton" class="action-button" type="button">
+          <span class="button-icon" aria-hidden="true">□</span>
+          <span>自定义截图</span>
+        </button>
+      </section>
+
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+    </main>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

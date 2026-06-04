@@ -1,0 +1,84 @@
+/* Selection overlay injected only during custom area capture. */
+
+.ripfullpage-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  cursor: crosshair;
+  background: rgba(3, 7, 18, 0.55);
+  user-select: none;
+}
+
+.ripfullpage-selection {
+  position: fixed;
+  box-sizing: border-box;
+  display: block;
+  width: 0;
+  height: 0;
+  border: 2px dashed rgba(255, 255, 255, 0.95);
+  background: rgba(59, 130, 246, 0.16);
+  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.45), 0 0 28px rgba(59, 130, 246, 0.35);
+  pointer-events: none;
+}
+
+.ripfullpage-size-label {
+  position: fixed;
+  box-sizing: border-box;
+  min-width: 70px;
+  padding: 5px 8px;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.95);
+  color: #f8fafc;
+  font: 12px/1.2 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  text-align: center;
+  pointer-events: none;
+}
+
+.ripfullpage-toast {
+  position: fixed;
+  top: 18px;
+  right: 18px;
+  z-index: 2147483647;
+  max-width: min(360px, calc(100vw - 36px));
+  padding: 10px 12px;
+  border: 1px solid rgba(147, 197, 253, 0.4);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.96);
+  color: #f8fafc;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.35);
+  font: 13px/1.4 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  pointer-events: none;
+}
+
+.ripfullpage-toast-error {
+  border-color: rgba(248, 113, 113, 0.6);
+  color: #fecaca;
+}
+
+html.ripfullpage-capturing,
+html.ripfullpage-capturing body {
+  scrollbar-width: none !important;
+}
+
+html.ripfullpage-capturing::-webkit-scrollbar,
+html.ripfullpage-capturing body::-webkit-scrollbar {
+  width: 0 !important;
+  height: 0 !important;
+  display: none !important;
+}
+
+html.ripfullpage-capturing [id*="immersive" i],
+html.ripfullpage-capturing [class*="immersive" i],
+html.ripfullpage-capturing [id*="immersive-translate" i],
+html.ripfullpage-capturing [class*="immersive-translate" i],
+html.ripfullpage-capturing [id*="translate" i],
+html.ripfullpage-capturing [class*="translate" i],
+html.ripfullpage-capturing [aria-label*="translate" i],
+html.ripfullpage-capturing [title*="translate" i],
+html.ripfullpage-capturing iframe[src*="chrome-extension:" i],
+html.ripfullpage-capturing iframe[src*="immersive" i],
+html.ripfullpage-capturing iframe[src*="translate" i] {
+  display: none !important;
+  visibility: hidden !important;
+}
