@@ -3,6 +3,7 @@
 const EDITOR_IMAGE_KEY = 'ripfullpage:lastImage';
 const MIN_CROP_SIZE = 20;
 const MAX_HISTORY = 30;
+const WATERMARK_PADDING = 16;
 
 const previewImage = document.getElementById('previewImage');
 const editCanvas = document.getElementById('editCanvas');
@@ -16,16 +17,29 @@ const resetButton = document.getElementById('resetButton');
 const downloadButton = document.getElementById('downloadButton');
 const downloadPdfButton = document.getElementById('downloadPdfButton');
 const copyButton = document.getElementById('copyButton');
+const watermarkButton = document.getElementById('watermarkButton');
 const shareButton = document.getElementById('shareButton');
 const undoButton = document.getElementById('undoButton');
 const redoButton = document.getElementById('redoButton');
 const colorInput = document.getElementById('colorInput');
 const sizeInput = document.getElementById('sizeInput');
 const fontSizeInput = document.getElementById('fontSizeInput');
+const privacyControls = document.getElementById('privacyControls');
+const privacyStrengthLabel = document.getElementById('privacyStrengthLabel');
+const privacyStrengthInput = document.getElementById('privacyStrengthInput');
+const privacyStrengthValue = document.getElementById('privacyStrengthValue');
 const formatSelect = document.getElementById('formatSelect');
 const qualityInput = document.getElementById('qualityInput');
 const dimensionBadge = document.getElementById('dimensionBadge');
 const stickerInput = document.getElementById('stickerInput');
+const watermarkPanel = document.getElementById('watermarkPanel');
+const watermarkTextInput = document.getElementById('watermarkTextInput');
+const watermarkFontSizeInput = document.getElementById('watermarkFontSizeInput');
+const watermarkOpacityInput = document.getElementById('watermarkOpacityInput');
+const applyWatermarkButton = document.getElementById('applyWatermarkButton');
+const cancelWatermarkButton = document.getElementById('cancelWatermarkButton');
+const watermarkPositionButtons = Array.from(document.querySelectorAll('[data-watermark-position]'));
+const watermarkColorButtons = Array.from(document.querySelectorAll('[data-watermark-color]'));
 const toolButtons = Array.from(document.querySelectorAll('[data-tool]'));
 
 let originalDataURL = '';
@@ -39,11 +53,18 @@ let activeTool = 'crop';
 let historyStack = [];
 let redoStack = [];
 let pendingStickerPoint = null;
+let watermarkPosition = 'bottom-right';
+let watermarkColor = '#ffffff';
 
 init();
 
 async function init() {
-  const stored = await chrome.storage.session.get(EDITOR_IMAGE_KEY);
+  const stored = await chrome.storage.session.get([
+    EDITOR_IMAGE_KEY,
+    'ripfullpage:sourceURL',
+    'ripfullpage:sourceUrl',
+    'ripfullpage:lastSourceURL'
+  ]);
   const item = stored[EDITOR_IMAGE_KEY];
 
   if (!item || !item.dataURL) {
@@ -54,12 +75,26 @@ async function init() {
 
   originalDataURL = item.dataURL;
   currentDataURL = item.dataURL;
+  watermarkTextInput.value = getStoredSourceURL(stored, item);
   historyStack = [currentDataURL];
 
   bindEvents();
   await loadPreview(currentDataURL);
   setActiveTool(activeTool);
   updateHistoryButtons();
+}
+
+function getStoredSourceURL(stored, item) {
+  return (
+    item.sourceURL ||
+    item.sourceUrl ||
+    item.pageURL ||
+    item.url ||
+    stored['ripfullpage:sourceURL'] ||
+    stored['ripfullpage:sourceUrl'] ||
+    stored['ripfullpage:lastSourceURL'] ||
+    ''
+  );
 }
 
 function bindEvents() {
@@ -74,14 +109,31 @@ function bindEvents() {
   downloadButton.addEventListener('click', downloadImage);
   downloadPdfButton.addEventListener('click', downloadPdf);
   copyButton.addEventListener('click', copyImageToClipboard);
+  watermarkButton.addEventListener('click', toggleWatermarkPanel);
   shareButton.addEventListener('click', shareImage);
   undoButton.addEventListener('click', undoEdit);
   redoButton.addEventListener('click', redoEdit);
   stickerInput.addEventListener('change', insertStickerFromInput);
+  privacyStrengthInput.addEventListener('input', updatePrivacyControls);
+  applyWatermarkButton.addEventListener('click', applyWatermark);
+  cancelWatermarkButton.addEventListener('click', hideWatermarkPanel);
+  watermarkPanel.addEventListener('pointerdown', (event) => event.stopPropagation());
 
   for (const button of toolButtons) {
     button.addEventListener('click', () => {
       setActiveTool(button.dataset.tool);
+    });
+  }
+
+  for (const button of watermarkPositionButtons) {
+    button.addEventListener('click', () => {
+      setWatermarkPosition(button.dataset.watermarkPosition);
+    });
+  }
+
+  for (const button of watermarkColorButtons) {
+    button.addEventListener('click', () => {
+      setWatermarkColor(button.dataset.watermarkColor);
     });
   }
 }
@@ -89,7 +141,7 @@ function bindEvents() {
 function onEditorKeyDown(event) {
   const isCommandKey = event.ctrlKey || event.metaKey;
 
-  if (!isCommandKey || !currentDataURL) {
+  if (!isCommandKey || !currentDataURL || isEditableTarget(event.target)) {
     return;
   }
 
@@ -109,6 +161,17 @@ function onEditorKeyDown(event) {
     event.preventDefault();
     redoEdit();
   }
+}
+
+function isEditableTarget(target) {
+  return (
+    target &&
+    (
+      target.tagName === 'INPUT' ||
+      target.tagName === 'TEXTAREA' ||
+      target.isContentEditable
+    )
+  );
 }
 
 function loadPreview(dataURL) {
@@ -170,6 +233,7 @@ function resetCropBox() {
 
 function setActiveTool(tool) {
   activeTool = tool;
+  hideWatermarkPanel();
 
   for (const button of toolButtons) {
     button.classList.toggle('active', button.dataset.tool === tool);
@@ -178,7 +242,16 @@ function setActiveTool(tool) {
   cropBox.hidden = tool !== 'crop';
   applyCropButton.disabled = tool !== 'crop' || !currentDataURL;
   imageWrap.dataset.tool = tool;
+  updatePrivacyControls();
   clearEditCanvas();
+}
+
+function updatePrivacyControls() {
+  const isPrivacyTool = activeTool === 'mosaic' || activeTool === 'blur';
+
+  privacyControls.hidden = !isPrivacyTool;
+  privacyStrengthLabel.textContent = activeTool === 'blur' ? '模糊强度' : '马赛克强度';
+  privacyStrengthValue.textContent = privacyStrengthInput.value;
 }
 
 function onPointerDown(event) {
@@ -376,8 +449,8 @@ function drawEditPreview() {
 
   clearEditCanvas();
 
-  if (editDragState.tool === 'mosaic') {
-    drawMosaicPreview(editContext, editDragState);
+  if (editDragState.tool === 'mosaic' || editDragState.tool === 'blur') {
+    drawPrivacyRectPreview(editContext, editDragState);
     return;
   }
 
@@ -398,6 +471,8 @@ async function commitEditState(state) {
 
   if (state.tool === 'mosaic') {
     applyMosaic(context, state, scaleX, scaleY);
+  } else if (state.tool === 'blur') {
+    applyBlur(context, state, scaleX, scaleY);
   } else if (state.tool === 'sticker') {
     await drawStickerState(context, state, scaleX, scaleY);
   } else {
@@ -500,7 +575,7 @@ function applyMosaic(context, state, scaleX, scaleY) {
   const start = scalePoint(state.start, scaleX, scaleY);
   const end = scalePoint(state.point, scaleX, scaleY);
   const rect = makeRect(start.x, start.y, end.x, end.y);
-  const blockSize = Math.max(8, Number(sizeInput.value) * 2);
+  const blockSize = getMosaicBlockSize();
 
   for (let y = rect.top; y < rect.top + rect.height; y += blockSize) {
     for (let x = rect.left; x < rect.left + rect.width; x += blockSize) {
@@ -516,7 +591,76 @@ function applyMosaic(context, state, scaleX, scaleY) {
   }
 }
 
-function drawMosaicPreview(context, state) {
+function applyBlur(context, state, scaleX, scaleY) {
+  const start = scalePoint(state.start, scaleX, scaleY);
+  const end = scalePoint(state.point, scaleX, scaleY);
+  const rect = clampRectToCanvas(makeRect(start.x, start.y, end.x, end.y), context.canvas);
+  const sourceWidth = Math.round(rect.width);
+  const sourceHeight = Math.round(rect.height);
+  const blurOptions = getBlurOptions();
+
+  if (sourceWidth < 2 || sourceHeight < 2) {
+    return;
+  }
+
+  const sourceCanvas = document.createElement('canvas');
+  const sourceContext = sourceCanvas.getContext('2d');
+  const smallCanvas = document.createElement('canvas');
+  const smallContext = smallCanvas.getContext('2d');
+  const smallWidth = Math.max(1, Math.round(sourceWidth / blurOptions.downscale));
+  const smallHeight = Math.max(1, Math.round(sourceHeight / blurOptions.downscale));
+
+  sourceCanvas.width = sourceWidth;
+  sourceCanvas.height = sourceHeight;
+  smallCanvas.width = smallWidth;
+  smallCanvas.height = smallHeight;
+
+  sourceContext.drawImage(
+    context.canvas,
+    Math.round(rect.left),
+    Math.round(rect.top),
+    sourceWidth,
+    sourceHeight,
+    0,
+    0,
+    sourceWidth,
+    sourceHeight
+  );
+
+  // 根据强度反复缩小再放大选区，模拟可调的高斯模糊。
+  for (let index = 0; index < blurOptions.iterations; index += 1) {
+    smallContext.clearRect(0, 0, smallWidth, smallHeight);
+    smallContext.imageSmoothingEnabled = true;
+    smallContext.imageSmoothingQuality = 'high';
+    smallContext.drawImage(sourceCanvas, 0, 0, smallWidth, smallHeight);
+
+    sourceContext.clearRect(0, 0, sourceWidth, sourceHeight);
+    sourceContext.imageSmoothingEnabled = true;
+    sourceContext.imageSmoothingQuality = 'high';
+    sourceContext.drawImage(smallCanvas, 0, 0, sourceWidth, sourceHeight);
+  }
+
+  context.drawImage(sourceCanvas, Math.round(rect.left), Math.round(rect.top));
+}
+
+function getPrivacyStrength() {
+  return clamp(Number(privacyStrengthInput.value) || 5, 1, 10);
+}
+
+function getMosaicBlockSize() {
+  return Math.max(6, Math.round(getPrivacyStrength() * 4));
+}
+
+function getBlurOptions() {
+  const strength = getPrivacyStrength();
+
+  return {
+    downscale: Math.round(4 + strength),
+    iterations: strength >= 8 ? 4 : strength >= 4 ? 3 : 2
+  };
+}
+
+function drawPrivacyRectPreview(context, state) {
   const rect = makeRect(state.start.x, state.start.y, state.point.x, state.point.y);
 
   context.save();
@@ -661,6 +805,206 @@ async function redoEdit() {
   await persistCurrentImage();
   await loadPreview(currentDataURL);
   updateHistoryButtons();
+}
+
+function toggleWatermarkPanel(event) {
+  event.preventDefault();
+  event.stopPropagation();
+
+  if (watermarkPanel.hidden) {
+    showWatermarkPanel();
+  } else {
+    hideWatermarkPanel();
+  }
+}
+
+function showWatermarkPanel() {
+  watermarkPanel.hidden = false;
+  watermarkTextInput.focus();
+  window.addEventListener('pointerdown', onWatermarkOutsidePointerDown);
+}
+
+function hideWatermarkPanel() {
+  if (watermarkPanel.hidden) {
+    return;
+  }
+
+  watermarkPanel.hidden = true;
+  window.removeEventListener('pointerdown', onWatermarkOutsidePointerDown);
+}
+
+function onWatermarkOutsidePointerDown(event) {
+  if (watermarkPanel.contains(event.target) || watermarkButton.contains(event.target)) {
+    return;
+  }
+
+  hideWatermarkPanel();
+}
+
+function setWatermarkPosition(position) {
+  watermarkPosition = position || 'bottom-right';
+
+  for (const button of watermarkPositionButtons) {
+    button.classList.toggle('active', button.dataset.watermarkPosition === watermarkPosition);
+  }
+}
+
+function setWatermarkColor(color) {
+  watermarkColor = color || '#ffffff';
+
+  for (const button of watermarkColorButtons) {
+    button.classList.toggle('active', button.dataset.watermarkColor === watermarkColor);
+  }
+}
+
+async function applyWatermark() {
+  const text = watermarkTextInput.value.trim();
+
+  if (!text) {
+    hideWatermarkPanel();
+    return;
+  }
+
+  const image = await loadImage(currentDataURL);
+  const canvas = document.createElement('canvas');
+  const context = canvas.getContext('2d');
+
+  canvas.width = image.naturalWidth;
+  canvas.height = image.naturalHeight;
+  context.drawImage(image, 0, 0);
+
+  // 水印直接绘制进主图，确保导出、复制、撤销/重做都走同一份图片状态。
+  drawWatermark(context, {
+    text,
+    position: watermarkPosition,
+    color: watermarkColor,
+    fontSize: Number(watermarkFontSizeInput.value),
+    opacity: Number(watermarkOpacityInput.value) / 100
+  });
+
+  currentDataURL = canvas.toDataURL('image/png');
+  pushHistory(currentDataURL);
+  await persistCurrentImage();
+  await loadPreview(currentDataURL);
+  hideWatermarkPanel();
+}
+
+function drawWatermark(context, options) {
+  const padding = WATERMARK_PADDING;
+  const fontSize = clamp(options.fontSize || 16, 12, 36);
+  const opacity = clamp(options.opacity || 0.4, 0.1, 1);
+  const canvas = context.canvas;
+  const labelPaddingX = Math.max(10, Math.round(fontSize * 0.55));
+  const labelPaddingY = Math.max(6, Math.round(fontSize * 0.32));
+  const maxTextWidth = Math.max(1, canvas.width - padding * 2 - labelPaddingX * 2);
+
+  context.save();
+  context.font = `600 ${fontSize}px ui-sans-serif, system-ui, sans-serif`;
+  context.textBaseline = 'top';
+
+  const metrics = context.measureText(options.text);
+  const textWidth = Math.min(metrics.width, maxTextWidth);
+  const textHeight = fontSize * 1.25;
+  const labelWidth = textWidth + labelPaddingX * 2;
+  const labelHeight = textHeight + labelPaddingY * 2;
+  const position = getWatermarkPoint(
+    options.position,
+    canvas.width,
+    canvas.height,
+    labelWidth,
+    labelHeight,
+    padding
+  );
+  const textX = position.x + labelPaddingX;
+  const textY = position.y + labelPaddingY;
+
+  // 半透明底托 + 文字描边 + 阴影，让水印在浅色和深色截图上都更清楚。
+  drawRoundedRect(context, position.x, position.y, labelWidth, labelHeight, Math.max(8, fontSize * 0.35));
+  context.fillStyle = getWatermarkBackdropColor(options.color, opacity);
+  context.fill();
+
+  context.shadowBlur = 4;
+  context.shadowColor = getWatermarkShadowColor(options.color);
+  context.lineWidth = Math.max(2, fontSize / 9);
+  context.strokeStyle = getWatermarkStrokeColor(options.color, opacity);
+  context.strokeText(options.text, textX, textY, maxTextWidth);
+  context.fillStyle = hexToRgba(options.color, opacity);
+  context.fillText(options.text, textX, textY, maxTextWidth);
+  context.restore();
+}
+
+function drawRoundedRect(context, x, y, width, height, radius) {
+  const safeRadius = Math.min(radius, width / 2, height / 2);
+
+  context.beginPath();
+  context.moveTo(x + safeRadius, y);
+  context.lineTo(x + width - safeRadius, y);
+  context.quadraticCurveTo(x + width, y, x + width, y + safeRadius);
+  context.lineTo(x + width, y + height - safeRadius);
+  context.quadraticCurveTo(x + width, y + height, x + width - safeRadius, y + height);
+  context.lineTo(x + safeRadius, y + height);
+  context.quadraticCurveTo(x, y + height, x, y + height - safeRadius);
+  context.lineTo(x, y + safeRadius);
+  context.quadraticCurveTo(x, y, x + safeRadius, y);
+  context.closePath();
+}
+
+function getWatermarkPoint(position, canvasWidth, canvasHeight, textWidth, textHeight, padding) {
+  const points = {
+    'top-left': {
+      x: padding,
+      y: padding
+    },
+    'top-right': {
+      x: canvasWidth - textWidth - padding,
+      y: padding
+    },
+    'bottom-left': {
+      x: padding,
+      y: canvasHeight - textHeight - padding
+    },
+    'bottom-right': {
+      x: canvasWidth - textWidth - padding,
+      y: canvasHeight - textHeight - padding
+    },
+    center: {
+      x: (canvasWidth - textWidth) / 2,
+      y: (canvasHeight - textHeight) / 2
+    }
+  };
+  const point = points[position] || points['bottom-right'];
+
+  return {
+    x: clamp(point.x, padding, Math.max(padding, canvasWidth - textWidth - padding)),
+    y: clamp(point.y, padding, Math.max(padding, canvasHeight - textHeight - padding))
+  };
+}
+
+function hexToRgba(hex, alpha) {
+  const value = hex.replace('#', '');
+  const red = parseInt(value.slice(0, 2), 16);
+  const green = parseInt(value.slice(2, 4), 16);
+  const blue = parseInt(value.slice(4, 6), 16);
+
+  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+}
+
+function getWatermarkShadowColor(color) {
+  return color.toLowerCase() === '#000000'
+    ? 'rgba(255, 255, 255, 0.55)'
+    : 'rgba(0, 0, 0, 0.62)';
+}
+
+function getWatermarkStrokeColor(color, opacity) {
+  return color.toLowerCase() === '#000000'
+    ? `rgba(255, 255, 255, ${Math.min(0.75, opacity + 0.1)})`
+    : `rgba(0, 0, 0, ${Math.min(0.82, opacity + 0.1)})`;
+}
+
+function getWatermarkBackdropColor(color, opacity) {
+  return color.toLowerCase() === '#000000'
+    ? `rgba(255, 255, 255, ${Math.min(0.38, opacity * 0.36)})`
+    : `rgba(2, 6, 23, ${Math.min(0.46, opacity * 0.42)})`;
 }
 
 async function downloadImage() {
@@ -1087,6 +1431,20 @@ function makeRect(x1, y1, x2, y2) {
   };
 }
 
+function clampRectToCanvas(rect, canvas) {
+  const left = clamp(rect.left, 0, canvas.width);
+  const top = clamp(rect.top, 0, canvas.height);
+  const right = clamp(rect.left + rect.width, 0, canvas.width);
+  const bottom = clamp(rect.top + rect.height, 0, canvas.height);
+
+  return {
+    left,
+    top,
+    width: Math.max(0, right - left),
+    height: Math.max(0, bottom - top)
+  };
+}
+
 function clearEditCanvas() {
   editContext.clearRect(0, 0, editCanvas.width, editCanvas.height);
 }
@@ -1132,6 +1490,7 @@ function setButtonsEnabled(enabled) {
   downloadButton.disabled = !enabled;
   downloadPdfButton.disabled = !enabled;
   copyButton.disabled = !enabled;
+  watermarkButton.disabled = !enabled;
   shareButton.disabled = !enabled;
   undoButton.disabled = !enabled || historyStack.length <= 1;
   redoButton.disabled = !enabled || redoStack.length === 0;
@@ -1143,6 +1502,17 @@ function setButtonsEnabled(enabled) {
   fontSizeInput.disabled = !enabled;
   formatSelect.disabled = !enabled;
   qualityInput.disabled = !enabled;
+  watermarkTextInput.disabled = !enabled;
+  watermarkFontSizeInput.disabled = !enabled;
+  watermarkOpacityInput.disabled = !enabled;
+  applyWatermarkButton.disabled = !enabled;
+  cancelWatermarkButton.disabled = !enabled;
+  for (const button of watermarkPositionButtons) {
+    button.disabled = !enabled;
+  }
+  for (const button of watermarkColorButtons) {
+    button.disabled = !enabled;
+  }
 }
 
 function clamp(value, min, max) {

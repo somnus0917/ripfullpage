@@ -6,6 +6,7 @@ const elementButton = document.getElementById('elementButton');
 const delaySelect = document.getElementById('delaySelect');
 const historyList = document.getElementById('historyList');
 const historyCount = document.getElementById('historyCount');
+const clearHistoryButton = document.getElementById('clearHistoryButton');
 const statusText = document.getElementById('status');
 const HISTORY_KEY = 'ripfullpage:history';
 
@@ -20,6 +21,8 @@ customAreaButton.addEventListener('click', () => {
 elementButton.addEventListener('click', () => {
   startCapture('elementArea');
 });
+
+clearHistoryButton.addEventListener('click', clearHistory);
 
 loadHistory();
 
@@ -52,6 +55,7 @@ function setBusy(isBusy) {
   customAreaButton.disabled = isBusy;
   elementButton.disabled = isBusy;
   delaySelect.disabled = isBusy;
+  clearHistoryButton.disabled = isBusy;
 }
 
 function showError(message) {
@@ -64,6 +68,8 @@ async function loadHistory() {
   const history = Array.isArray(stored[HISTORY_KEY]) ? stored[HISTORY_KEY] : [];
 
   historyCount.textContent = history.length ? `${history.length}` : '';
+  clearHistoryButton.hidden = !history.length;
+  clearHistoryButton.disabled = !history.length;
 
   if (!history.length) {
     historyList.innerHTML = '<p class="empty-history">暂无历史</p>';
@@ -71,26 +77,64 @@ async function loadHistory() {
   }
 
   historyList.replaceChildren(
-    ...history.slice(0, 6).map((item) => createHistoryButton(item))
+    ...history.map((item) => createHistoryItem(item))
   );
 }
 
-function createHistoryButton(item) {
-  const button = document.createElement('button');
+function createHistoryItem(item) {
+  const wrapper = document.createElement('div');
+  const openButton = document.createElement('button');
+  const deleteButton = document.createElement('button');
   const image = document.createElement('img');
   const time = document.createElement('span');
 
-  button.type = 'button';
-  button.className = 'history-item';
-  button.title = '打开历史截图';
+  wrapper.className = 'history-item';
+  openButton.type = 'button';
+  openButton.className = 'history-open-button';
+  openButton.title = '打开历史截图';
+  deleteButton.type = 'button';
+  deleteButton.className = 'history-delete-button';
+  deleteButton.title = '删除这张截图';
+  deleteButton.setAttribute('aria-label', '删除这张截图');
+  deleteButton.textContent = '×';
   image.src = item.thumbnailURL || item.dataURL;
   image.alt = '';
   time.textContent = formatTime(item.createdAt);
 
-  button.append(image, time);
-  button.addEventListener('click', () => openHistoryItem(item.id));
+  openButton.append(image, time);
+  openButton.addEventListener('click', () => openHistoryItem(item.id));
+  deleteButton.addEventListener('click', () => deleteHistoryItem(item.id));
+  wrapper.append(openButton, deleteButton);
 
-  return button;
+  return wrapper;
+}
+
+async function deleteHistoryItem(id) {
+  const stored = await chrome.storage.local.get(HISTORY_KEY);
+  const history = Array.isArray(stored[HISTORY_KEY]) ? stored[HISTORY_KEY] : [];
+  const nextHistory = history.filter((item) => item.id !== id);
+
+  await chrome.storage.local.set({
+    [HISTORY_KEY]: nextHistory
+  });
+
+  statusText.textContent = '已删除';
+  loadHistory();
+}
+
+async function clearHistory() {
+  const confirmed = window.confirm('确定删除所有最近截图吗？');
+
+  if (!confirmed) {
+    return;
+  }
+
+  await chrome.storage.local.set({
+    [HISTORY_KEY]: []
+  });
+
+  statusText.textContent = '已清空最近截图';
+  loadHistory();
 }
 
 function openHistoryItem(id) {

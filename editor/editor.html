@@ -23,6 +23,7 @@
           <button id="applyCropButton" class="button primary" type="button">确认裁剪</button>
           <button id="resetButton" class="button" type="button">重置</button>
           <button id="copyButton" class="button" type="button">复制</button>
+          <button id="watermarkButton" class="button" type="button">水印</button>
           <button id="shareButton" class="button" type="button">分享</button>
           <label class="toolbar-select-label">
             <span>格式</span>
@@ -52,10 +53,21 @@
             <button class="tool-button" data-tool="arrow" type="button" title="箭头">箭头</button>
             <button class="tool-button" data-tool="text" type="button" title="文字">文字</button>
             <button class="tool-button" data-tool="mosaic" type="button" title="马赛克">马赛克</button>
+            <button class="tool-button blur-tool" data-tool="blur" type="button" title="模糊">模糊</button>
             <button class="tool-button" data-tool="sticker" type="button" title="贴图">贴图</button>
           </div>
 
           <div class="tool-controls">
+            <div id="privacyControls" class="privacy-controls" hidden>
+              <div class="privacy-control-header">
+                <label id="privacyStrengthLabel" class="field-label" for="privacyStrengthInput">强度</label>
+                <span id="privacyStrengthValue">5</span>
+              </div>
+              <label class="range-label" title="打码强度">
+                <input id="privacyStrengthInput" type="range" min="1" max="10" value="5">
+              </label>
+            </div>
+
             <label class="field-label" for="colorInput">颜色</label>
             <label class="control-label" title="颜色">
               <input id="colorInput" type="color" value="#ef4444">
@@ -93,6 +105,49 @@
             </div>
           </div>
         </section>
+      </div>
+
+      <div id="watermarkPanel" class="watermark-panel" hidden>
+        <label class="watermark-field" for="watermarkTextInput">
+          <span>水印文字</span>
+          <input id="watermarkTextInput" type="text" placeholder="输入水印文字">
+        </label>
+
+        <div class="watermark-field">
+          <span>位置</span>
+          <div class="watermark-position-grid" role="group" aria-label="水印位置">
+            <button class="watermark-position-button" data-watermark-position="top-left" type="button" title="左上">↖</button>
+            <button class="watermark-position-button" data-watermark-position="top-right" type="button" title="右上">↗</button>
+            <button class="watermark-position-button active" data-watermark-position="bottom-right" type="button" title="右下">↘</button>
+            <button class="watermark-position-button" data-watermark-position="bottom-left" type="button" title="左下">↙</button>
+            <button class="watermark-position-button" data-watermark-position="center" type="button" title="居中">⊙</button>
+          </div>
+        </div>
+
+        <label class="watermark-field" for="watermarkFontSizeInput">
+          <span>字号</span>
+          <input id="watermarkFontSizeInput" type="range" min="12" max="36" value="22">
+        </label>
+
+        <label class="watermark-field" for="watermarkOpacityInput">
+          <span>透明度</span>
+          <input id="watermarkOpacityInput" type="range" min="10" max="100" value="72">
+        </label>
+
+        <div class="watermark-field">
+          <span>颜色</span>
+          <div class="watermark-color-row" role="group" aria-label="水印颜色">
+            <button class="watermark-color-button active" data-watermark-color="#ffffff" type="button" title="白色"></button>
+            <button class="watermark-color-button" data-watermark-color="#000000" type="button" title="黑色"></button>
+            <button class="watermark-color-button" data-watermark-color="#94a3b8" type="button" title="灰色"></button>
+            <button class="watermark-color-button" data-watermark-color="#ef4444" type="button" title="红色"></button>
+          </div>
+        </div>
+
+        <div class="watermark-actions">
+          <button id="applyWatermarkButton" class="button primary" type="button">应用水印</button>
+          <button id="cancelWatermarkButton" class="button" type="button">取消</button>
+        </div>
       </div>
       <input id="stickerInput" type="file" accept="image/*" hidden>
     </main>

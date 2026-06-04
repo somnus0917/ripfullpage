@@ -50,6 +50,26 @@
 
 在编辑器中可以进行裁剪、标注、打码、贴图、撤销/重做，最后复制到剪贴板、下载图片、导出 PDF 或调用系统分享。
 
+## 工作流程
+
+```mermaid
+flowchart TD
+    A[Popup<br/>用户点击截图]
+    B[Background<br/>任务调度 / 调用截图 API]
+    C[Content Script<br/>滚动页面 / 获取选区]
+    F{是否完成长截图?}
+    D[Editor<br/>Canvas 预览与编辑]
+    E[导出<br/>复制 / 下载]
+
+    A -->|发送截图命令| B
+    B -->|请求页面信息| C
+    C -->|返回视口位置和页面尺寸| B
+    B -->|captureVisibleTab 截图| F
+    F -->|否，继续滚动| C
+    F -->|是| D
+    D --> E
+```
+
 ## 项目结构
 
 ```text
