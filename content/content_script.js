@@ -182,7 +182,8 @@
     const choice = await showLargeCaptureDialog({
       totalTiles,
       pageHeight: pageSize.height,
-      limitedTiles: limitedPlan.xPositions.length * limitedPlan.yPositions.length,
+      limitedTiles:
+        limitedPlan.xPositions.length * limitedPlan.yPositions.length,
       limitedHeight: limitedPlan.pageSize.height,
     });
 
@@ -546,7 +547,8 @@
       overlay.className = "ripfullpage-dialog-overlay";
       dialog.className = "ripfullpage-dialog";
       actions.className = "ripfullpage-dialog-actions";
-      limitButton.className = "ripfullpage-dialog-button ripfullpage-dialog-primary";
+      limitButton.className =
+        "ripfullpage-dialog-button ripfullpage-dialog-primary";
       fullButton.className = "ripfullpage-dialog-button";
       cancelButton.className = "ripfullpage-dialog-button";
 
@@ -754,7 +756,10 @@
 
         const rect = clampRectToViewport(activeElement.getBoundingClientRect());
 
-        if (rect.width < MIN_SELECTION_SIZE || rect.height < MIN_SELECTION_SIZE) {
+        if (
+          rect.width < MIN_SELECTION_SIZE ||
+          rect.height < MIN_SELECTION_SIZE
+        ) {
           cancel();
           return;
         }
@@ -778,7 +783,10 @@
     ) {
       const rect = current.getBoundingClientRect();
 
-      if (rect.width >= MIN_SELECTION_SIZE && rect.height >= MIN_SELECTION_SIZE) {
+      if (
+        rect.width >= MIN_SELECTION_SIZE &&
+        rect.height >= MIN_SELECTION_SIZE
+      ) {
         return current;
       }
 
@@ -1273,14 +1281,21 @@
   }
 
   async function waitForCaptureDelay(delaySeconds) {
-    const totalSeconds = Math.max(0, Math.min(5, Math.round(Number(delaySeconds) || 0)));
+    const totalSeconds = Math.max(
+      0,
+      Math.min(5, Math.round(Number(delaySeconds) || 0)),
+    );
 
     if (!totalSeconds) {
       return;
     }
 
     for (let second = totalSeconds; second > 0; second -= 1) {
-      showToast(`将在 ${second} 秒后截图...`, false, (totalSeconds - second) / totalSeconds);
+      showToast(
+        `将在 ${second} 秒后截图...`,
+        false,
+        (totalSeconds - second) / totalSeconds,
+      );
       await wait(1000);
     }
 
@@ -1307,7 +1322,10 @@
 
     textNode.textContent = text;
     activeToast.classList.toggle("ripfullpage-toast-error", isError);
-    activeToast.classList.toggle("ripfullpage-toast-has-progress", progress !== null);
+    activeToast.classList.toggle(
+      "ripfullpage-toast-has-progress",
+      progress !== null,
+    );
 
     if (progress !== null) {
       fill.style.width = `${Math.round(clamp(progress, 0, 1) * 100)}%`;
