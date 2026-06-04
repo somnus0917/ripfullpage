@@ -17,31 +17,61 @@
           </div>
         </div>
 
-        <div class="toolbar-actions" aria-label="编辑操作">
+        <div class="toolbar-actions" aria-label="文件操作">
+          <button id="undoButton" class="button" type="button">撤销</button>
+          <button id="redoButton" class="button" type="button">重做</button>
           <button id="applyCropButton" class="button primary" type="button">确认裁剪</button>
           <button id="resetButton" class="button" type="button">重置</button>
           <button id="downloadButton" class="button" type="button">下载 PNG</button>
+          <button id="downloadPdfButton" class="button" type="button">导出 PDF</button>
         </div>
       </header>
 
-      <section class="workspace" aria-label="截图预览">
-        <div id="stage" class="stage">
-          <div id="imageWrap" class="image-wrap">
-            <img id="previewImage" alt="截图预览">
-            <div id="cropBox" class="crop-box" hidden>
-              <span class="handle handle-n" data-handle="n"></span>
-              <span class="handle handle-ne" data-handle="ne"></span>
-              <span class="handle handle-e" data-handle="e"></span>
-              <span class="handle handle-se" data-handle="se"></span>
-              <span class="handle handle-s" data-handle="s"></span>
-              <span class="handle handle-sw" data-handle="sw"></span>
-              <span class="handle handle-w" data-handle="w"></span>
-              <span class="handle handle-nw" data-handle="nw"></span>
-              <span id="cropSize" class="crop-size"></span>
+      <div class="editor-layout">
+        <aside class="side-tools" aria-label="编辑工具">
+          <div class="tool-group" role="group" aria-label="编辑工具">
+            <button class="tool-button active" data-tool="crop" type="button" title="裁剪">裁剪</button>
+            <button class="tool-button" data-tool="pen" type="button" title="画笔">画笔</button>
+            <button class="tool-button" data-tool="marker" type="button" title="高亮">高亮</button>
+            <button class="tool-button" data-tool="rect" type="button" title="矩形">矩形</button>
+            <button class="tool-button" data-tool="arrow" type="button" title="箭头">箭头</button>
+            <button class="tool-button" data-tool="text" type="button" title="文字">文字</button>
+            <button class="tool-button" data-tool="mosaic" type="button" title="马赛克">马赛克</button>
+          </div>
+
+          <div class="tool-controls">
+            <label class="field-label" for="colorInput">颜色</label>
+            <label class="control-label" title="颜色">
+              <input id="colorInput" type="color" value="#ef4444">
+            </label>
+
+            <label class="field-label" for="sizeInput">粗细</label>
+            <label class="range-label" title="粗细">
+              <input id="sizeInput" type="range" min="2" max="48" value="6">
+            </label>
+          </div>
+        </aside>
+
+        <section class="workspace" aria-label="截图预览">
+          <div id="stage" class="stage">
+            <div id="imageWrap" class="image-wrap">
+              <img id="previewImage" alt="截图预览">
+              <canvas id="editCanvas" aria-label="编辑图层"></canvas>
+              <div id="cropBox" class="crop-box" hidden>
+                <span class="handle handle-n" data-handle="n"></span>
+                <span class="handle handle-ne" data-handle="ne"></span>
+                <span class="handle handle-e" data-handle="e"></span>
+                <span class="handle handle-se" data-handle="se"></span>
+                <span class="handle handle-s" data-handle="s"></span>
+                <span class="handle handle-sw" data-handle="sw"></span>
+                <span class="handle handle-w" data-handle="w"></span>
+                <span class="handle handle-nw" data-handle="nw"></span>
+                <span id="cropSize" class="crop-size"></span>
+              </div>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
+      </div>
     </main>
 
     <script src="editor.js"></script>
