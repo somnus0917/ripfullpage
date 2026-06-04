@@ -1,0 +1,18 @@
+{
+  "extensionName": {
+    "message": "ripfullpage",
+    "description": "Extension name"
+  },
+  "extensionDescription": {
+    "message": "Capture full pages, custom areas, page elements, and edit screenshots.",
+    "description": "Extension description"
+  },
+  "commandFullPage": {
+    "message": "Full page capture",
+    "description": "Full page shortcut description"
+  },
+  "commandCustomArea": {
+    "message": "Custom area capture",
+    "description": "Custom area shortcut description"
+  }
+}

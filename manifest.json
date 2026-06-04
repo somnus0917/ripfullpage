@@ -1,13 +1,16 @@
 {
   "manifest_version": 3,
-  "name": "ripfullpage",
+  "name": "__MSG_extensionName__",
   "version": "1.0.0",
-  "description": "Capture full pages or custom areas and crop/download screenshots.",
+  "default_locale": "zh_CN",
+  "description": "__MSG_extensionDescription__",
   "permissions": [
     "activeTab",
+    "clipboardWrite",
     "scripting",
     "tabs",
-    "storage"
+    "storage",
+    "unlimitedStorage"
   ],
   "action": {
     "default_title": "ripfullpage",
@@ -20,6 +23,22 @@
   },
   "background": {
     "service_worker": "background/service_worker.js"
+  },
+  "commands": {
+    "full-page-capture": {
+      "suggested_key": {
+        "default": "Alt+Shift+F",
+        "mac": "Alt+Shift+F"
+      },
+      "description": "__MSG_commandFullPage__"
+    },
+    "custom-area-capture": {
+      "suggested_key": {
+        "default": "Alt+Shift+S",
+        "mac": "Alt+Shift+S"
+      },
+      "description": "__MSG_commandCustomArea__"
+    }
   },
   "icons": {
     "16": "icons/icon16.png",

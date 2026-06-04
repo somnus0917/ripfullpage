@@ -22,7 +22,21 @@
           <button id="redoButton" class="button" type="button">重做</button>
           <button id="applyCropButton" class="button primary" type="button">确认裁剪</button>
           <button id="resetButton" class="button" type="button">重置</button>
-          <button id="downloadButton" class="button" type="button">下载 PNG</button>
+          <button id="copyButton" class="button" type="button">复制</button>
+          <button id="shareButton" class="button" type="button">分享</button>
+          <label class="toolbar-select-label">
+            <span>格式</span>
+            <select id="formatSelect">
+              <option value="image/png">PNG</option>
+              <option value="image/jpeg">JPG</option>
+              <option value="image/webp">WebP</option>
+            </select>
+          </label>
+          <label class="toolbar-range-label">
+            <span>质量</span>
+            <input id="qualityInput" type="range" min="50" max="100" value="92">
+          </label>
+          <button id="downloadButton" class="button" type="button">下载图片</button>
           <button id="downloadPdfButton" class="button" type="button">导出 PDF</button>
         </div>
       </header>
@@ -34,9 +48,11 @@
             <button class="tool-button" data-tool="pen" type="button" title="画笔">画笔</button>
             <button class="tool-button" data-tool="marker" type="button" title="高亮">高亮</button>
             <button class="tool-button" data-tool="rect" type="button" title="矩形">矩形</button>
+            <button class="tool-button" data-tool="ellipse" type="button" title="椭圆">椭圆</button>
             <button class="tool-button" data-tool="arrow" type="button" title="箭头">箭头</button>
             <button class="tool-button" data-tool="text" type="button" title="文字">文字</button>
             <button class="tool-button" data-tool="mosaic" type="button" title="马赛克">马赛克</button>
+            <button class="tool-button" data-tool="sticker" type="button" title="贴图">贴图</button>
           </div>
 
           <div class="tool-controls">
@@ -49,10 +65,16 @@
             <label class="range-label" title="粗细">
               <input id="sizeInput" type="range" min="2" max="48" value="6">
             </label>
+
+            <label class="field-label" for="fontSizeInput">字号</label>
+            <label class="range-label" title="字号">
+              <input id="fontSizeInput" type="range" min="12" max="96" value="28">
+            </label>
           </div>
         </aside>
 
         <section class="workspace" aria-label="截图预览">
+          <div id="dimensionBadge" class="dimension-badge">0 x 0px</div>
           <div id="stage" class="stage">
             <div id="imageWrap" class="image-wrap">
               <img id="previewImage" alt="截图预览">
@@ -72,6 +94,7 @@
           </div>
         </section>
       </div>
+      <input id="stickerInput" type="file" accept="image/*" hidden>
     </main>
 
     <script src="editor.js"></script>

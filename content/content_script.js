@@ -23,7 +23,9 @@
 
     if (message.action === "startCapture") {
       sendResponse({ ok: true });
-      captureFullPage().catch((error) => {
+      captureFullPage({
+        delaySeconds: message.delaySeconds,
+      }).catch((error) => {
         console.error("[ripfullpage] Full page capture failed:", error);
         showToast(`全页截图失败：${error.message}`, true);
       });
@@ -32,8 +34,21 @@
 
     if (message.action === "startCustomArea") {
       sendResponse({ ok: true });
-      startCustomAreaCapture().catch((error) => {
+      startCustomAreaCapture({
+        delaySeconds: message.delaySeconds,
+      }).catch((error) => {
         console.error("[ripfullpage] Custom area capture failed:", error);
+      });
+      return false;
+    }
+
+    if (message.action === "startElementCapture") {
+      sendResponse({ ok: true });
+      startElementCapture({
+        delaySeconds: message.delaySeconds,
+      }).catch((error) => {
+        console.error("[ripfullpage] Element capture failed:", error);
+        showToast(`元素截图失败：${error.message}`, true);
       });
       return false;
     }
@@ -41,7 +56,9 @@
     return false;
   });
 
-  async function captureFullPage() {
+  async function captureFullPage(options = {}) {
+    await waitForCaptureDelay(options.delaySeconds);
+
     const scrollTarget = getScrollTarget();
     const originalScrollX = getScrollLeft(scrollTarget);
     const originalScrollY = getScrollTop(scrollTarget);
@@ -85,7 +102,7 @@
 
     document.documentElement.style.scrollBehavior = "auto";
     document.documentElement.classList.add("ripfullpage-capturing");
-    showToast(`正在准备全页截图，共 ${totalTiles} 张分块...`);
+    showToast(`正在准备全页截图，共 ${totalTiles} 张分块...`, false, 0);
 
     try {
       for (const y of yPositions) {
@@ -101,7 +118,11 @@
           await wait(CAPTURE_DELAY_MS);
 
           capturedTiles += 1;
-          showToast(`正在截图 ${capturedTiles}/${totalTiles}...`);
+          showToast(
+            `正在截图 ${capturedTiles}/${totalTiles}...`,
+            false,
+            capturedTiles / totalTiles,
+          );
 
           const isFirstTile = capturedTiles === 1;
           const dataURL = await captureCleanViewport(isFirstTile);
@@ -224,8 +245,26 @@
     };
   }
 
-  async function startCustomAreaCapture() {
+  async function startCustomAreaCapture(options = {}) {
+    await waitForCaptureDelay(options.delaySeconds);
+
     const rect = await selectArea();
+
+    if (!rect) {
+      return;
+    }
+
+    const dataURL = await requestVisibleTabCapture();
+    const image = await loadImage(dataURL);
+    const croppedDataURL = cropImageToViewportRect(image, rect);
+
+    await openEditor(croppedDataURL);
+  }
+
+  async function startElementCapture(options = {}) {
+    await waitForCaptureDelay(options.delaySeconds);
+
+    const rect = await selectElement();
 
     if (!rect) {
       return;
@@ -644,6 +683,123 @@
       overlay.addEventListener("mousemove", onMouseMove, true);
       overlay.addEventListener("mouseup", onMouseUp, true);
     });
+  }
+
+  function selectElement() {
+    return new Promise((resolve) => {
+      let activeElement = null;
+
+      const overlay = document.createElement("div");
+      const highlight = document.createElement("div");
+      const label = document.createElement("div");
+
+      overlay.className = "ripfullpage-element-overlay";
+      highlight.className = "ripfullpage-element-highlight";
+      label.className = "ripfullpage-size-label";
+      label.textContent = "点击选择元素，ESC 取消";
+
+      overlay.append(highlight, label);
+      document.documentElement.appendChild(overlay);
+
+      const cleanup = () => {
+        document.removeEventListener("keydown", onKeyDown, true);
+        overlay.removeEventListener("mousemove", onMouseMove, true);
+        overlay.removeEventListener("click", onClick, true);
+        overlay.remove();
+      };
+      const cancel = () => {
+        cleanup();
+        resolve(null);
+      };
+      const finish = (rect) => {
+        cleanup();
+        resolve(rect);
+      };
+      const onKeyDown = (event) => {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          event.stopPropagation();
+          cancel();
+        }
+      };
+      const onMouseMove = (event) => {
+        overlay.style.pointerEvents = "none";
+        const element = document.elementFromPoint(event.clientX, event.clientY);
+        overlay.style.pointerEvents = "auto";
+        activeElement = findSelectableElement(element);
+
+        if (!activeElement) {
+          highlight.hidden = true;
+          return;
+        }
+
+        const rect = clampRectToViewport(activeElement.getBoundingClientRect());
+
+        highlight.hidden = false;
+        highlight.style.left = `${rect.left}px`;
+        highlight.style.top = `${rect.top}px`;
+        highlight.style.width = `${rect.width}px`;
+        highlight.style.height = `${rect.height}px`;
+        label.textContent = `${Math.round(rect.width)} x ${Math.round(rect.height)}`;
+        label.style.left = `${rect.left}px`;
+        label.style.top = `${Math.max(8, rect.top - 32)}px`;
+      };
+      const onClick = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+
+        if (!activeElement) {
+          return;
+        }
+
+        const rect = clampRectToViewport(activeElement.getBoundingClientRect());
+
+        if (rect.width < MIN_SELECTION_SIZE || rect.height < MIN_SELECTION_SIZE) {
+          cancel();
+          return;
+        }
+
+        finish(rect);
+      };
+
+      document.addEventListener("keydown", onKeyDown, true);
+      overlay.addEventListener("mousemove", onMouseMove, true);
+      overlay.addEventListener("click", onClick, true);
+    });
+  }
+
+  function findSelectableElement(element) {
+    let current = element;
+
+    while (
+      current &&
+      current !== document.body &&
+      current !== document.documentElement
+    ) {
+      const rect = current.getBoundingClientRect();
+
+      if (rect.width >= MIN_SELECTION_SIZE && rect.height >= MIN_SELECTION_SIZE) {
+        return current;
+      }
+
+      current = current.parentElement;
+    }
+
+    return null;
+  }
+
+  function clampRectToViewport(rect) {
+    const left = clamp(rect.left, 0, window.innerWidth);
+    const top = clamp(rect.top, 0, window.innerHeight);
+    const right = clamp(rect.right, 0, window.innerWidth);
+    const bottom = clamp(rect.bottom, 0, window.innerHeight);
+
+    return {
+      left,
+      top,
+      width: Math.max(0, right - left),
+      height: Math.max(0, bottom - top),
+    };
   }
 
   function makeRect(x1, y1, x2, y2) {
@@ -1116,19 +1272,48 @@
     });
   }
 
+  async function waitForCaptureDelay(delaySeconds) {
+    const totalSeconds = Math.max(0, Math.min(5, Math.round(Number(delaySeconds) || 0)));
+
+    if (!totalSeconds) {
+      return;
+    }
+
+    for (let second = totalSeconds; second > 0; second -= 1) {
+      showToast(`将在 ${second} 秒后截图...`, false, (totalSeconds - second) / totalSeconds);
+      await wait(1000);
+    }
+
+    showToast("正在截图...", false, 1);
+    await wait(120);
+  }
+
   function clamp(value, min, max) {
     return Math.min(max, Math.max(min, value));
   }
 
-  function showToast(text, isError = false) {
+  function showToast(text, isError = false, progress = null) {
     if (!activeToast) {
       activeToast = document.createElement("div");
       activeToast.className = "ripfullpage-toast";
+      activeToast.innerHTML =
+        '<span class="ripfullpage-toast-text"></span><span class="ripfullpage-toast-bar"><span></span></span>';
       document.documentElement.appendChild(activeToast);
     }
 
-    activeToast.textContent = text;
+    const textNode = activeToast.querySelector(".ripfullpage-toast-text");
+    const bar = activeToast.querySelector(".ripfullpage-toast-bar");
+    const fill = activeToast.querySelector(".ripfullpage-toast-bar span");
+
+    textNode.textContent = text;
     activeToast.classList.toggle("ripfullpage-toast-error", isError);
+    activeToast.classList.toggle("ripfullpage-toast-has-progress", progress !== null);
+
+    if (progress !== null) {
+      fill.style.width = `${Math.round(clamp(progress, 0, 1) * 100)}%`;
+    } else {
+      fill.style.width = "0%";
+    }
 
     if (isError) {
       window.setTimeout(hideToast, 5000);

@@ -25,6 +25,35 @@
           <span class="button-icon" aria-hidden="true">□</span>
           <span>自定义截图</span>
         </button>
+        <button id="elementButton" class="action-button" type="button">
+          <span class="button-icon" aria-hidden="true">◇</span>
+          <span>元素截图</span>
+        </button>
+      </section>
+
+      <section class="delay-panel" aria-label="延迟截图">
+        <label for="delaySelect">延迟</label>
+        <select id="delaySelect">
+          <option value="0">立即截图</option>
+          <option value="2">2 秒后</option>
+          <option value="3">3 秒后</option>
+          <option value="5">5 秒后</option>
+        </select>
+      </section>
+
+      <section class="shortcut-panel" aria-label="快捷键">
+        <span>Alt+Shift+F 全页</span>
+        <span>Alt+Shift+S 区域</span>
+      </section>
+
+      <section class="history-panel" aria-label="截图历史">
+        <div class="section-title">
+          <span>最近截图</span>
+          <span id="historyCount"></span>
+        </div>
+        <div id="historyList" class="history-list">
+          <p class="empty-history">暂无历史</p>
+        </div>
       </section>
 
       <p id="status" class="status" role="status" aria-live="polite"></p>

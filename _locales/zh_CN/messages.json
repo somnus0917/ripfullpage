@@ -1,0 +1,18 @@
+{
+  "extensionName": {
+    "message": "ripfullpage",
+    "description": "插件名称"
+  },
+  "extensionDescription": {
+    "message": "全页截图、自定义区域截图、元素截图和截图编辑工具。",
+    "description": "插件描述"
+  },
+  "commandFullPage": {
+    "message": "全页截图",
+    "description": "全页截图快捷键描述"
+  },
+  "commandCustomArea": {
+    "message": "自定义区域截图",
+    "description": "自定义区域截图快捷键描述"
+  }
+}

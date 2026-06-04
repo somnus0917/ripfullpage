@@ -2,6 +2,8 @@
 // It injects the content script on demand, captures visible tabs, and opens the editor.
 
 const EDITOR_IMAGE_KEY = 'ripfullpage:lastImage';
+const HISTORY_KEY = 'ripfullpage:history';
+const MAX_HISTORY_ITEMS = 12;
 const MIN_CAPTURE_INTERVAL_MS = 650;
 
 let lastVisibleCaptureAt = 0;
@@ -11,8 +13,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return false;
   }
 
-  if (message.action === 'fullPage' || message.action === 'customArea') {
-    startCaptureFlow(message.action)
+  if (
+    message.action === 'fullPage' ||
+    message.action === 'customArea' ||
+    message.action === 'elementArea'
+  ) {
+    startCaptureFlow(message.action, message.options || {})
       .then(() => sendResponse({ ok: true }))
       .catch((error) => sendResponse({ ok: false, error: error.message }));
     return true;
@@ -32,10 +38,33 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message.action === 'openHistoryItem') {
+    openHistoryItem(message.id)
+      .then(() => sendResponse({ ok: true }))
+      .catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+
   return false;
 });
 
-async function startCaptureFlow(flowAction) {
+chrome.commands.onCommand.addListener((command) => {
+  const actionByCommand = {
+    'full-page-capture': 'fullPage',
+    'custom-area-capture': 'customArea'
+  };
+  const action = actionByCommand[command];
+
+  if (!action) {
+    return;
+  }
+
+  startCaptureFlow(action).catch((error) => {
+    console.error('[ripfullpage] Command capture failed:', error);
+  });
+});
+
+async function startCaptureFlow(flowAction, options = {}) {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
   if (!tab || !tab.id) {
@@ -48,8 +77,17 @@ async function startCaptureFlow(flowAction) {
 
   await ensureContentScript(tab.id);
 
-  const action = flowAction === 'fullPage' ? 'startCapture' : 'startCustomArea';
-  await chrome.tabs.sendMessage(tab.id, { action });
+  const contentActionByFlow = {
+    fullPage: 'startCapture',
+    customArea: 'startCustomArea',
+    elementArea: 'startElementCapture'
+  };
+  const action = contentActionByFlow[flowAction];
+
+  await chrome.tabs.sendMessage(tab.id, {
+    action,
+    delaySeconds: normalizeDelaySeconds(options.delaySeconds)
+  });
 }
 
 async function ensureContentScript(tabId) {
@@ -94,6 +132,13 @@ async function openEditor(dataURL) {
     throw new Error('Missing screenshot data.');
   }
 
+  try {
+    await saveHistoryItem(dataURL);
+  } catch (error) {
+    // History is convenient, but it should never block the screenshot result.
+    console.warn('[ripfullpage] Could not save screenshot history:', error);
+  }
+
   await chrome.storage.session.set({
     [EDITOR_IMAGE_KEY]: {
       dataURL,
@@ -104,6 +149,96 @@ async function openEditor(dataURL) {
   await chrome.tabs.create({
     url: chrome.runtime.getURL('editor/editor.html')
   });
+}
+
+async function openHistoryItem(id) {
+  if (!id) {
+    throw new Error('Missing history item id.');
+  }
+
+  const stored = await chrome.storage.local.get(HISTORY_KEY);
+  const history = Array.isArray(stored[HISTORY_KEY]) ? stored[HISTORY_KEY] : [];
+  const item = history.find((entry) => entry.id === id);
+
+  if (!item || !item.dataURL) {
+    throw new Error('History item not found.');
+  }
+
+  await chrome.storage.session.set({
+    [EDITOR_IMAGE_KEY]: {
+      dataURL: item.dataURL,
+      createdAt: item.createdAt || Date.now()
+    }
+  });
+
+  await chrome.tabs.create({
+    url: chrome.runtime.getURL('editor/editor.html')
+  });
+}
+
+async function saveHistoryItem(dataURL) {
+  const stored = await chrome.storage.local.get(HISTORY_KEY);
+  const history = Array.isArray(stored[HISTORY_KEY]) ? stored[HISTORY_KEY] : [];
+  const createdAt = Date.now();
+  const item = {
+    id: `shot-${createdAt}-${Math.random().toString(16).slice(2)}`,
+    dataURL,
+    thumbnailURL: await createThumbnailDataURL(dataURL),
+    createdAt
+  };
+
+  history.unshift(item);
+
+  await chrome.storage.local.set({
+    [HISTORY_KEY]: history.slice(0, MAX_HISTORY_ITEMS)
+  });
+}
+
+async function createThumbnailDataURL(dataURL) {
+  const image = await createImageBitmap(await dataURLToBlob(dataURL));
+  const canvas = new OffscreenCanvas(180, 120);
+  const context = canvas.getContext('2d');
+  const scale = Math.min(canvas.width / image.width, canvas.height / image.height);
+  const width = Math.max(1, Math.round(image.width * scale));
+  const height = Math.max(1, Math.round(image.height * scale));
+  const x = Math.round((canvas.width - width) / 2);
+  const y = Math.round((canvas.height - height) / 2);
+
+  context.fillStyle = '#0f172a';
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.drawImage(image, x, y, width, height);
+  image.close();
+
+  const blob = await canvas.convertToBlob({ type: 'image/webp', quality: 0.78 });
+  return blobToDataURL(blob);
+}
+
+async function dataURLToBlob(dataURL) {
+  const response = await fetch(dataURL);
+  return response.blob();
+}
+
+function blobToDataURL(blob) {
+  return blob.arrayBuffer().then((buffer) => {
+    const bytes = new Uint8Array(buffer);
+    let binary = '';
+
+    for (let index = 0; index < bytes.length; index += 1) {
+      binary += String.fromCharCode(bytes[index]);
+    }
+
+    return `data:${blob.type};base64,${btoa(binary)}`;
+  });
+}
+
+function normalizeDelaySeconds(value) {
+  const seconds = Number(value);
+
+  if (!Number.isFinite(seconds)) {
+    return 0;
+  }
+
+  return Math.max(0, Math.min(5, Math.round(seconds)));
 }
 
 function isRestrictedUrl(url = '') {

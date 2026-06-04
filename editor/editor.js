@@ -1,4 +1,4 @@
-// Screenshot editor. It supports crop, annotation, mosaic, undo/redo, reset, and PNG download.
+// Screenshot editor. It supports crop, annotation, mosaic, undo/redo, reset, copy, share, and export.
 
 const EDITOR_IMAGE_KEY = 'ripfullpage:lastImage';
 const MIN_CROP_SIZE = 20;
@@ -15,10 +15,17 @@ const applyCropButton = document.getElementById('applyCropButton');
 const resetButton = document.getElementById('resetButton');
 const downloadButton = document.getElementById('downloadButton');
 const downloadPdfButton = document.getElementById('downloadPdfButton');
+const copyButton = document.getElementById('copyButton');
+const shareButton = document.getElementById('shareButton');
 const undoButton = document.getElementById('undoButton');
 const redoButton = document.getElementById('redoButton');
 const colorInput = document.getElementById('colorInput');
 const sizeInput = document.getElementById('sizeInput');
+const fontSizeInput = document.getElementById('fontSizeInput');
+const formatSelect = document.getElementById('formatSelect');
+const qualityInput = document.getElementById('qualityInput');
+const dimensionBadge = document.getElementById('dimensionBadge');
+const stickerInput = document.getElementById('stickerInput');
 const toolButtons = Array.from(document.querySelectorAll('[data-tool]'));
 
 let originalDataURL = '';
@@ -31,6 +38,7 @@ let editDragState = null;
 let activeTool = 'crop';
 let historyStack = [];
 let redoStack = [];
+let pendingStickerPoint = null;
 
 init();
 
@@ -56,6 +64,7 @@ async function init() {
 
 function bindEvents() {
   window.addEventListener('resize', syncEditorLayout);
+  window.addEventListener('keydown', onEditorKeyDown);
   imageWrap.addEventListener('pointerdown', onPointerDown);
   window.addEventListener('pointermove', onPointerMove);
   window.addEventListener('pointerup', onPointerUp);
@@ -64,13 +73,41 @@ function bindEvents() {
   resetButton.addEventListener('click', resetImage);
   downloadButton.addEventListener('click', downloadImage);
   downloadPdfButton.addEventListener('click', downloadPdf);
+  copyButton.addEventListener('click', copyImageToClipboard);
+  shareButton.addEventListener('click', shareImage);
   undoButton.addEventListener('click', undoEdit);
   redoButton.addEventListener('click', redoEdit);
+  stickerInput.addEventListener('change', insertStickerFromInput);
 
   for (const button of toolButtons) {
     button.addEventListener('click', () => {
       setActiveTool(button.dataset.tool);
     });
+  }
+}
+
+function onEditorKeyDown(event) {
+  const isCommandKey = event.ctrlKey || event.metaKey;
+
+  if (!isCommandKey || !currentDataURL) {
+    return;
+  }
+
+  const key = event.key.toLowerCase();
+
+  if (key === 'c') {
+    event.preventDefault();
+    copyImageToClipboard();
+  }
+
+  if (key === 'z' && !event.shiftKey) {
+    event.preventDefault();
+    undoEdit();
+  }
+
+  if ((key === 'z' && event.shiftKey) || key === 'y') {
+    event.preventDefault();
+    redoEdit();
   }
 }
 
@@ -80,6 +117,7 @@ function loadPreview(dataURL) {
       naturalWidth = previewImage.naturalWidth;
       naturalHeight = previewImage.naturalHeight;
       imageMeta.textContent = `${naturalWidth} x ${naturalHeight}px`;
+      dimensionBadge.textContent = `${naturalWidth} x ${naturalHeight}px`;
       setButtonsEnabled(true);
       syncEditorLayout();
       resetCropBox();
@@ -150,6 +188,11 @@ function onPointerDown(event) {
 
   if (activeTool === 'crop') {
     startCropDrag(event);
+    return;
+  }
+
+  if (activeTool === 'sticker') {
+    startStickerInsert(event);
     return;
   }
 
@@ -287,6 +330,45 @@ async function endEditDrag(event) {
   await commitEditState(state);
 }
 
+function startStickerInsert(event) {
+  const imageRect = getRenderedImageRect();
+
+  pendingStickerPoint = getLocalPoint(event, imageRect);
+  stickerInput.value = '';
+  stickerInput.click();
+  event.preventDefault();
+}
+
+async function insertStickerFromInput() {
+  const file = stickerInput.files && stickerInput.files[0];
+
+  if (!file || !pendingStickerPoint) {
+    pendingStickerPoint = null;
+    return;
+  }
+
+  const dataURL = await readFileAsDataURL(file);
+  const stickerImage = await loadImage(dataURL);
+  const imageRect = getRenderedImageRect();
+  const maxRenderedWidth = imageRect.width * 0.28;
+  const renderedWidth = Math.max(24, Math.min(maxRenderedWidth, stickerImage.naturalWidth));
+  const renderedHeight = renderedWidth * (stickerImage.naturalHeight / stickerImage.naturalWidth);
+  const state = {
+    tool: 'sticker',
+    start: {
+      x: pendingStickerPoint.x - renderedWidth / 2,
+      y: pendingStickerPoint.y - renderedHeight / 2
+    },
+    point: pendingStickerPoint,
+    stickerDataURL: dataURL,
+    stickerRenderedWidth: renderedWidth,
+    stickerRenderedHeight: renderedHeight
+  };
+
+  pendingStickerPoint = null;
+  await commitEditState(state);
+}
+
 function drawEditPreview() {
   if (!editDragState) {
     return;
@@ -316,6 +398,8 @@ async function commitEditState(state) {
 
   if (state.tool === 'mosaic') {
     applyMosaic(context, state, scaleX, scaleY);
+  } else if (state.tool === 'sticker') {
+    await drawStickerState(context, state, scaleX, scaleY);
   } else {
     drawEditState(context, state, scaleX, scaleY);
   }
@@ -365,6 +449,24 @@ function drawEditState(context, state, scaleX, scaleY = scaleX) {
     context.strokeRect(rect.left, rect.top, rect.width, rect.height);
   }
 
+  if (state.tool === 'ellipse') {
+    const rect = makeRect(start.x, start.y, end.x, end.y);
+
+    context.strokeStyle = color;
+    context.lineWidth = size * scaleX;
+    context.beginPath();
+    context.ellipse(
+      rect.left + rect.width / 2,
+      rect.top + rect.height / 2,
+      Math.max(1, rect.width / 2),
+      Math.max(1, rect.height / 2),
+      0,
+      0,
+      Math.PI * 2
+    );
+    context.stroke();
+  }
+
   if (state.tool === 'arrow') {
     context.strokeStyle = color;
     context.fillStyle = color;
@@ -373,13 +475,25 @@ function drawEditState(context, state, scaleX, scaleY = scaleX) {
   }
 
   if (state.tool === 'text') {
+    const fontSize = Number(fontSizeInput.value);
+
     context.fillStyle = color;
-    context.font = `600 ${Math.max(14, size * 4) * scaleX}px ui-sans-serif, system-ui, sans-serif`;
+    context.font = `600 ${fontSize * scaleX}px ui-sans-serif, system-ui, sans-serif`;
     context.textBaseline = 'top';
     context.fillText(state.text, start.x, start.y);
   }
 
   context.restore();
+}
+
+async function drawStickerState(context, state, scaleX, scaleY) {
+  const sticker = await loadImage(state.stickerDataURL);
+  const x = state.start.x * scaleX;
+  const y = state.start.y * scaleY;
+  const width = state.stickerRenderedWidth * scaleX;
+  const height = state.stickerRenderedHeight * scaleY;
+
+  context.drawImage(sticker, x, y, width, height);
 }
 
 function applyMosaic(context, state, scaleX, scaleY) {
@@ -549,13 +663,135 @@ async function redoEdit() {
   updateHistoryButtons();
 }
 
-function downloadImage() {
+async function downloadImage() {
   const anchor = document.createElement('a');
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const blob = await createOutputBlob(formatSelect.value);
+  const url = URL.createObjectURL(blob);
 
-  anchor.href = currentDataURL;
-  anchor.download = `ripfullpage-${timestamp}.png`;
+  anchor.href = url;
+  anchor.download = `ripfullpage-${timestamp}.${getFileExtension(formatSelect.value)}`;
   anchor.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+async function copyImageToClipboard() {
+  if (!navigator.clipboard || typeof ClipboardItem === 'undefined') {
+    window.alert('当前浏览器不支持图片剪贴板。');
+    return;
+  }
+
+  const originalText = copyButton.textContent;
+
+  try {
+    copyButton.disabled = true;
+    copyButton.textContent = '复制中...';
+    const blob = await createOutputBlob('image/png');
+
+    await navigator.clipboard.write([
+      new ClipboardItem({
+        [blob.type]: blob
+      })
+    ]);
+    copyButton.textContent = '已复制';
+    window.setTimeout(() => {
+      copyButton.textContent = originalText;
+      copyButton.disabled = false;
+    }, 1200);
+  } catch (error) {
+    console.error('[ripfullpage] Copy failed:', error);
+    copyButton.textContent = originalText;
+    copyButton.disabled = false;
+    window.alert('复制失败，请确认浏览器允许剪贴板访问。');
+  }
+}
+
+async function shareImage() {
+  const originalText = shareButton.textContent;
+
+  try {
+    const type = formatSelect.value;
+    const blob = await createOutputBlob(type);
+    const file = new File(
+      [blob],
+      `ripfullpage-${new Date().toISOString().replace(/[:.]/g, '-')}.${getFileExtension(type)}`,
+      { type: blob.type }
+    );
+
+    if (!navigator.canShare || !navigator.canShare({ files: [file] })) {
+      await copyImageToClipboard();
+      return;
+    }
+
+    shareButton.disabled = true;
+    shareButton.textContent = '分享中...';
+    await navigator.share({
+      title: 'ripfullpage screenshot',
+      files: [file]
+    });
+  } catch (error) {
+    if (error && error.name !== 'AbortError') {
+      console.error('[ripfullpage] Share failed:', error);
+      window.alert('分享失败，已保留复制/下载方式。');
+    }
+  } finally {
+    shareButton.textContent = originalText;
+    shareButton.disabled = false;
+  }
+}
+
+async function createOutputBlob(type) {
+  const image = await loadImage(currentDataURL);
+  const canvas = document.createElement('canvas');
+  const context = canvas.getContext('2d');
+  const normalizedType = normalizeImageType(type);
+  const quality = Number(qualityInput.value) / 100;
+
+  canvas.width = image.naturalWidth;
+  canvas.height = image.naturalHeight;
+
+  if (normalizedType === 'image/jpeg') {
+    context.fillStyle = '#ffffff';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+  }
+
+  context.drawImage(image, 0, 0);
+
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => {
+        if (blob) {
+          resolve(blob);
+        } else {
+          reject(new Error('Could not export image.'));
+        }
+      },
+      normalizedType,
+      normalizedType === 'image/png' ? undefined : quality
+    );
+  });
+}
+
+function normalizeImageType(type) {
+  if (type === 'image/jpeg' || type === 'image/webp') {
+    return type;
+  }
+
+  return 'image/png';
+}
+
+function getFileExtension(type) {
+  const normalizedType = normalizeImageType(type);
+
+  if (normalizedType === 'image/jpeg') {
+    return 'jpg';
+  }
+
+  if (normalizedType === 'image/webp') {
+    return 'webp';
+  }
+
+  return 'png';
 }
 
 async function downloadPdf() {
@@ -767,6 +1003,16 @@ function waitForFrame() {
   });
 }
 
+function readFileAsDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('Could not read image file.'));
+    reader.readAsDataURL(file);
+  });
+}
+
 function renderCropBox() {
   if (!cropRect) {
     return;
@@ -885,6 +1131,8 @@ function setButtonsEnabled(enabled) {
   resetButton.disabled = !enabled;
   downloadButton.disabled = !enabled;
   downloadPdfButton.disabled = !enabled;
+  copyButton.disabled = !enabled;
+  shareButton.disabled = !enabled;
   undoButton.disabled = !enabled || historyStack.length <= 1;
   redoButton.disabled = !enabled || redoStack.length === 0;
   for (const button of toolButtons) {
@@ -892,6 +1140,9 @@ function setButtonsEnabled(enabled) {
   }
   colorInput.disabled = !enabled;
   sizeInput.disabled = !enabled;
+  fontSizeInput.disabled = !enabled;
+  formatSelect.disabled = !enabled;
+  qualityInput.disabled = !enabled;
 }
 
 function clamp(value, min, max) {
