@@ -135,6 +135,38 @@ p {
   font-size: 11px;
 }
 
+.feedback-button {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  min-height: 48px;
+  margin-top: 12px;
+  padding: 8px 10px;
+  border: 1px solid rgba(125, 211, 252, 0.3);
+  border-radius: 8px;
+  background: #102033;
+  color: #f8fafc;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.feedback-button:hover {
+  border-color: rgba(125, 211, 252, 0.7);
+  background: #13283f;
+}
+
+.feedback-button:active {
+  transform: translateY(1px);
+}
+
+.feedback-email {
+  color: #93c5fd;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
 .history-panel {
   margin-top: 14px;
   padding-top: 12px;

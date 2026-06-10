@@ -3,12 +3,15 @@
 const fullPageButton = document.getElementById('fullPageButton');
 const customAreaButton = document.getElementById('customAreaButton');
 const elementButton = document.getElementById('elementButton');
+const scrollElementButton = document.getElementById('scrollElementButton');
 const delaySelect = document.getElementById('delaySelect');
 const historyList = document.getElementById('historyList');
 const historyCount = document.getElementById('historyCount');
 const clearHistoryButton = document.getElementById('clearHistoryButton');
+const feedbackButton = document.getElementById('feedbackButton');
 const statusText = document.getElementById('status');
 const HISTORY_KEY = 'ripfullpage:history';
+const FEEDBACK_EMAIL = 'somnus0917chen@hotmail.com';
 
 fullPageButton.addEventListener('click', () => {
   startCapture('fullPage');
@@ -21,6 +24,12 @@ customAreaButton.addEventListener('click', () => {
 elementButton.addEventListener('click', () => {
   startCapture('elementArea');
 });
+
+scrollElementButton.addEventListener('click', () => {
+  startCapture('scrollElementArea');
+});
+
+feedbackButton.addEventListener('click', openFeedbackEmail);
 
 clearHistoryButton.addEventListener('click', clearHistory);
 
@@ -54,6 +63,7 @@ function setBusy(isBusy) {
   fullPageButton.disabled = isBusy;
   customAreaButton.disabled = isBusy;
   elementButton.disabled = isBusy;
+  scrollElementButton.disabled = isBusy;
   delaySelect.disabled = isBusy;
   clearHistoryButton.disabled = isBusy;
 }
@@ -61,6 +71,21 @@ function setBusy(isBusy) {
 function showError(message) {
   setBusy(false);
   statusText.textContent = message;
+}
+
+function openFeedbackEmail() {
+  const subject = encodeURIComponent('ripfullpage 反馈');
+  const body = encodeURIComponent('\n\n请描述遇到的问题或建议：\n');
+  const mailtoURL = `mailto:${FEEDBACK_EMAIL}?subject=${subject}&body=${body}`;
+
+  chrome.tabs.create({ url: mailtoURL }, (tab) => {
+    if (chrome.runtime.lastError || !tab) {
+      window.location.href = mailtoURL;
+      return;
+    }
+
+    window.close();
+  });
 }
 
 async function loadHistory() {

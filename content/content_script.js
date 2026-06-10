@@ -53,6 +53,17 @@
       return false;
     }
 
+    if (message.action === "startScrollableElementCapture") {
+      sendResponse({ ok: true });
+      startScrollableElementCapture({
+        delaySeconds: message.delaySeconds,
+      }).catch((error) => {
+        console.error("[ripfullpage] Scrollable element capture failed:", error);
+        showToast(`滚动元素截图失败：${error.message}`, true);
+      });
+      return false;
+    }
+
     return false;
   });
 
@@ -276,6 +287,149 @@
     const croppedDataURL = cropImageToViewportRect(image, rect);
 
     await openEditor(croppedDataURL);
+  }
+
+  async function startScrollableElementCapture(options = {}) {
+    await waitForCaptureDelay(options.delaySeconds);
+
+    const target = await selectScrollableElement();
+
+    if (!target) {
+      return;
+    }
+
+    await captureScrollableElement(target);
+  }
+
+  async function captureScrollableElement(target) {
+    const captureTarget = normalizeScrollableCaptureTarget(target);
+    const scrollTarget = captureTarget.scrollElement;
+    const viewportTarget = captureTarget.viewportElement;
+
+    if (
+      !scrollTarget ||
+      !viewportTarget ||
+      !scrollTarget.isConnected ||
+      !viewportTarget.isConnected
+    ) {
+      throw new Error("滚动区域已不存在。");
+    }
+
+    const originalScrollLeft = scrollTarget.scrollLeft;
+    const originalScrollTop = scrollTarget.scrollTop;
+    const originalScrollBehavior = scrollTarget.style.scrollBehavior;
+    const originalDocumentScrollBehavior =
+      document.documentElement.style.scrollBehavior;
+    let capturePageSize = null;
+    let xPositions = [];
+    let yPositions = [];
+    let captureViewport = null;
+    let restoreScrollbars = () => {};
+
+    document.documentElement.style.scrollBehavior = "auto";
+    document.documentElement.classList.add("ripfullpage-capturing");
+    restoreScrollbars = hideScrollableTargetScrollbars(captureTarget);
+    scrollTarget.style.scrollBehavior = "auto";
+
+    try {
+      await wait(80);
+
+      const pageSize = getScrollableTargetSize(captureTarget);
+      captureViewport = getScrollableTargetCaptureViewport(captureTarget);
+
+      if (
+        captureViewport.width < MIN_SELECTION_SIZE ||
+        captureViewport.height < MIN_SELECTION_SIZE
+      ) {
+        throw new Error("滚动区域太小，无法截图。");
+      }
+
+      xPositions = buildScrollPositions(
+        pageSize.width,
+        captureViewport.width,
+        TILE_OVERLAP_CSS_PX,
+      );
+      yPositions = buildScrollPositions(
+        pageSize.height,
+        captureViewport.height,
+        TILE_OVERLAP_CSS_PX,
+      );
+
+      const capturePlan = await confirmLargeCaptureIfNeeded(
+        pageSize,
+        captureViewport,
+        xPositions,
+        yPositions,
+      );
+
+      if (capturePlan.action === "cancel") {
+        return;
+      }
+
+      capturePageSize = capturePlan.pageSize;
+      xPositions = capturePlan.xPositions;
+      yPositions = capturePlan.yPositions;
+
+      const tileGrid = [];
+      const totalTiles = xPositions.length * yPositions.length;
+      let capturedTiles = 0;
+      let scaleX = window.devicePixelRatio || 1;
+      let scaleY = window.devicePixelRatio || 1;
+
+      showToast(`正在准备滚动元素截图，共 ${totalTiles} 张分块...`, false, 0);
+
+      for (const y of yPositions) {
+        const row = [];
+
+        for (const x of xPositions) {
+          scrollToPosition(scrollTarget, x, y);
+          const actualPosition = await waitForScrollPosition(scrollTarget, x, y);
+          await wait(CAPTURE_DELAY_MS);
+
+          capturedTiles += 1;
+          showToast(
+            `正在截图 ${capturedTiles}/${totalTiles}...`,
+            false,
+            capturedTiles / totalTiles,
+          );
+
+          const viewportRect = getScrollableTargetCaptureViewport(captureTarget);
+          const dataURL = await captureCleanViewport(true);
+          const image = await loadImage(dataURL);
+          const tileDataURL = cropImageToViewportRect(image, viewportRect);
+          const tileImage = await loadImage(tileDataURL);
+
+          scaleX = tileImage.naturalWidth / captureViewport.width;
+          scaleY = tileImage.naturalHeight / captureViewport.height;
+
+          row.push({
+            x: actualPosition.x,
+            y: actualPosition.y,
+            image: tileImage,
+          });
+        }
+
+        tileGrid.push(row);
+      }
+
+      showToast("正在拼接滚动元素截图...");
+      const stitchedDataURL = stitchTiles(
+        tileGrid,
+        capturePageSize,
+        captureViewport,
+        scaleX,
+        scaleY,
+      );
+      await openEditor(stitchedDataURL);
+      hideToast();
+    } finally {
+      scrollToPosition(scrollTarget, originalScrollLeft, originalScrollTop);
+      scrollTarget.style.scrollBehavior = originalScrollBehavior;
+      restoreScrollbars();
+      document.documentElement.style.scrollBehavior =
+        originalDocumentScrollBehavior;
+      document.documentElement.classList.remove("ripfullpage-capturing");
+    }
   }
 
   function getScrollTarget() {
@@ -773,6 +927,93 @@
     });
   }
 
+  function selectScrollableElement() {
+    return new Promise((resolve) => {
+      let activeTarget = null;
+
+      const overlay = document.createElement("div");
+      const highlight = document.createElement("div");
+      const label = document.createElement("div");
+
+      overlay.className = "ripfullpage-element-overlay";
+      highlight.className = "ripfullpage-element-highlight";
+      label.className = "ripfullpage-size-label";
+      label.textContent = "点击选择内部滚动区域，ESC 取消";
+
+      overlay.append(highlight, label);
+      document.documentElement.appendChild(overlay);
+
+      const cleanup = () => {
+        document.removeEventListener("keydown", onKeyDown, true);
+        overlay.removeEventListener("mousemove", onMouseMove, true);
+        overlay.removeEventListener("click", onClick, true);
+        overlay.remove();
+      };
+      const cancel = () => {
+        cleanup();
+        resolve(null);
+      };
+      const finish = (element) => {
+        cleanup();
+        resolve(element);
+      };
+      const onKeyDown = (event) => {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          event.stopPropagation();
+          cancel();
+        }
+      };
+      const onMouseMove = (event) => {
+        overlay.style.pointerEvents = "none";
+        const element = document.elementFromPoint(event.clientX, event.clientY);
+        overlay.style.pointerEvents = "auto";
+        activeTarget = findScrollableTarget(element);
+
+        if (!activeTarget) {
+          highlight.hidden = true;
+          label.textContent = "移动到有内部滚动条的区域";
+          label.style.left =
+            `${clamp(event.clientX + 12, 8, Math.max(8, window.innerWidth - 170))}px`;
+          label.style.top =
+            `${clamp(event.clientY + 12, 8, Math.max(8, window.innerHeight - 34))}px`;
+          return;
+        }
+
+        const rect = clampRectToViewport(
+          activeTarget.viewportElement.getBoundingClientRect(),
+        );
+        const scrollSize = getScrollableTargetSize(activeTarget);
+        const axisLabel = getScrollableTargetAxisLabel(activeTarget);
+
+        highlight.hidden = false;
+        highlight.style.left = `${rect.left}px`;
+        highlight.style.top = `${rect.top}px`;
+        highlight.style.width = `${rect.width}px`;
+        highlight.style.height = `${rect.height}px`;
+        label.textContent =
+          `${axisLabel} ${Math.round(scrollSize.width)} x ${Math.round(scrollSize.height)}`;
+        label.style.left = `${rect.left}px`;
+        label.style.top = `${Math.max(8, rect.top - 32)}px`;
+      };
+      const onClick = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+
+        if (!activeTarget) {
+          showToast("请点击有内部滚动条的区域。", true);
+          return;
+        }
+
+        finish(activeTarget);
+      };
+
+      document.addEventListener("keydown", onKeyDown, true);
+      overlay.addEventListener("mousemove", onMouseMove, true);
+      overlay.addEventListener("click", onClick, true);
+    });
+  }
+
   function findSelectableElement(element) {
     let current = element;
 
@@ -794,6 +1035,250 @@
     }
 
     return null;
+  }
+
+  function findScrollableTarget(element) {
+    let current = element;
+
+    while (
+      current &&
+      current !== document.body &&
+      current !== document.documentElement
+    ) {
+      const frameTarget = getSameOriginScrollableFrameTarget(current);
+
+      if (frameTarget) {
+        return frameTarget;
+      }
+
+      if (isScrollableCaptureTarget(current)) {
+        return {
+          scrollElement: current,
+          viewportElement: current,
+          type: "element",
+        };
+      }
+
+      current = current.parentElement;
+    }
+
+    return null;
+  }
+
+  function normalizeScrollableCaptureTarget(target) {
+    if (target && target.scrollElement && target.viewportElement) {
+      return target;
+    }
+
+    return {
+      scrollElement: target,
+      viewportElement: target,
+      type: "element",
+    };
+  }
+
+  function getSameOriginScrollableFrameTarget(element) {
+    if (!isIframeElement(element)) {
+      return null;
+    }
+
+    const scrollElement = getFrameScrollElement(element);
+
+    if (!scrollElement || !isScrollableDocumentTarget(scrollElement)) {
+      return null;
+    }
+
+    return {
+      scrollElement,
+      viewportElement: element,
+      type: "frame",
+    };
+  }
+
+  function isIframeElement(element) {
+    return (
+      element &&
+      element.nodeType === Node.ELEMENT_NODE &&
+      element.tagName.toLowerCase() === "iframe"
+    );
+  }
+
+  function getFrameScrollElement(iframe) {
+    try {
+      const frameDocument = iframe.contentDocument;
+
+      if (!frameDocument) {
+        return null;
+      }
+
+      return (
+        frameDocument.scrollingElement ||
+        frameDocument.documentElement ||
+        frameDocument.body
+      );
+    } catch (_error) {
+      return null;
+    }
+  }
+
+  function isScrollableCaptureTarget(element) {
+    if (!element || element.nodeType !== Node.ELEMENT_NODE) {
+      return false;
+    }
+
+    const rect = element.getBoundingClientRect();
+    const style = window.getComputedStyle(element);
+
+    if (
+      rect.width < MIN_SELECTION_SIZE ||
+      rect.height < MIN_SELECTION_SIZE ||
+      style.visibility === "hidden" ||
+      style.display === "none"
+    ) {
+      return false;
+    }
+
+    const canScrollX = element.scrollWidth > element.clientWidth + 2;
+    const canScrollY = element.scrollHeight > element.clientHeight + 2;
+    const allowsScrollX = isScrollableOverflow(style.overflowX);
+    const allowsScrollY = isScrollableOverflow(style.overflowY);
+
+    return (canScrollX && allowsScrollX) || (canScrollY && allowsScrollY);
+  }
+
+  function isScrollableDocumentTarget(element) {
+    if (!element || element.nodeType !== Node.ELEMENT_NODE) {
+      return false;
+    }
+
+    const frameWindow = element.ownerDocument.defaultView;
+
+    if (!frameWindow) {
+      return false;
+    }
+
+    const viewportWidth = frameWindow.innerWidth || element.clientWidth;
+    const viewportHeight = frameWindow.innerHeight || element.clientHeight;
+
+    return (
+      element.scrollWidth > viewportWidth + 2 ||
+      element.scrollHeight > viewportHeight + 2
+    );
+  }
+
+  function isScrollableOverflow(value) {
+    return /auto|scroll|overlay/.test(value || "");
+  }
+
+  function getScrollableTargetAxisLabel(target) {
+    const captureTarget = normalizeScrollableCaptureTarget(target);
+    const element = captureTarget.scrollElement;
+    const scrollsX = element.scrollWidth > element.clientWidth + 2;
+    const scrollsY = element.scrollHeight > element.clientHeight + 2;
+
+    if (scrollsX && scrollsY) {
+      return "横纵滚动";
+    }
+
+    return scrollsX ? "横向滚动" : "纵向滚动";
+  }
+
+  function getScrollableTargetSize(target) {
+    const captureTarget = normalizeScrollableCaptureTarget(target);
+    const element = captureTarget.scrollElement;
+
+    return {
+      width: Math.max(element.scrollWidth, element.clientWidth),
+      height: Math.max(element.scrollHeight, element.clientHeight),
+    };
+  }
+
+  function getScrollableTargetCaptureViewport(target) {
+    const captureTarget = normalizeScrollableCaptureTarget(target);
+    const element = captureTarget.viewportElement;
+    const rect = element.getBoundingClientRect();
+    const style = window.getComputedStyle(element);
+    const left = rect.left + parseCssPixels(style.borderLeftWidth);
+    const top = rect.top + parseCssPixels(style.borderTopWidth);
+    const viewportRect = {
+      left,
+      top,
+      width: element.clientWidth,
+      height: element.clientHeight,
+    };
+    const clampedRect = clampRectToViewport({
+      left: viewportRect.left,
+      top: viewportRect.top,
+      right: viewportRect.left + viewportRect.width,
+      bottom: viewportRect.top + viewportRect.height,
+    });
+
+    if (
+      Math.abs(clampedRect.width - viewportRect.width) > 2 ||
+      Math.abs(clampedRect.height - viewportRect.height) > 2
+    ) {
+      throw new Error("请先将滚动区域完整显示在窗口内再截图。");
+    }
+
+    return viewportRect;
+  }
+
+  function hideScrollableTargetScrollbars(target) {
+    const captureTarget = normalizeScrollableCaptureTarget(target);
+
+    if (captureTarget.type === "frame") {
+      return hideFrameScrollbars(captureTarget.scrollElement.ownerDocument);
+    }
+
+    captureTarget.scrollElement.classList.add(
+      "ripfullpage-scroll-target-capturing",
+    );
+
+    return () => {
+      if (captureTarget.scrollElement.isConnected) {
+        captureTarget.scrollElement.classList.remove(
+          "ripfullpage-scroll-target-capturing",
+        );
+      }
+    };
+  }
+
+  function hideFrameScrollbars(frameDocument) {
+    if (!frameDocument || !frameDocument.documentElement) {
+      return () => {};
+    }
+
+    const style = frameDocument.createElement("style");
+
+    style.textContent =
+      "html.ripfullpage-scroll-target-capturing," +
+      "html.ripfullpage-scroll-target-capturing body{" +
+      "scrollbar-width:none!important;" +
+      "}" +
+      "html.ripfullpage-scroll-target-capturing::-webkit-scrollbar," +
+      "html.ripfullpage-scroll-target-capturing body::-webkit-scrollbar{" +
+      "width:0!important;height:0!important;display:none!important;" +
+      "}";
+    frameDocument.documentElement.classList.add(
+      "ripfullpage-scroll-target-capturing",
+    );
+    (frameDocument.head || frameDocument.documentElement).appendChild(style);
+
+    return () => {
+      if (frameDocument.documentElement) {
+        frameDocument.documentElement.classList.remove(
+          "ripfullpage-scroll-target-capturing",
+        );
+      }
+
+      style.remove();
+    };
+  }
+
+  function parseCssPixels(value) {
+    const parsed = Number.parseFloat(value);
+
+    return Number.isFinite(parsed) ? parsed : 0;
   }
 
   function clampRectToViewport(rect) {

@@ -181,6 +181,16 @@ html.ripfullpage-capturing body::-webkit-scrollbar {
   display: none !important;
 }
 
+.ripfullpage-scroll-target-capturing {
+  scrollbar-width: none !important;
+}
+
+.ripfullpage-scroll-target-capturing::-webkit-scrollbar {
+  width: 0 !important;
+  height: 0 !important;
+  display: none !important;
+}
+
 html.ripfullpage-capturing [id*="immersive" i],
 html.ripfullpage-capturing [class*="immersive" i],
 html.ripfullpage-capturing [id*="immersive-translate" i],

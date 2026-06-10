@@ -16,7 +16,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (
     message.action === 'fullPage' ||
     message.action === 'customArea' ||
-    message.action === 'elementArea'
+    message.action === 'elementArea' ||
+    message.action === 'scrollElementArea'
   ) {
     startCaptureFlow(message.action, message.options || {})
       .then(() => sendResponse({ ok: true }))
@@ -80,7 +81,8 @@ async function startCaptureFlow(flowAction, options = {}) {
   const contentActionByFlow = {
     fullPage: 'startCapture',
     customArea: 'startCustomArea',
-    elementArea: 'startElementCapture'
+    elementArea: 'startElementCapture',
+    scrollElementArea: 'startScrollableElementCapture'
   };
   const action = contentActionByFlow[flowAction];
 
