@@ -12,59 +12,67 @@
         <img src="../icons/icon48.png" alt="" class="popup-logo">
         <div>
           <h1>ripfullpage</h1>
-          <p>Screenshot tool</p>
+          <p data-i18n="subtitle">Screenshot tool</p>
         </div>
       </header>
 
-      <section class="actions" aria-label="截图操作">
+      <section class="language-panel" aria-label="语言" data-i18n-aria-label="languageLabel">
+        <span data-i18n="languageLabel">语言</span>
+        <div class="language-toggle" role="group" aria-label="语言" data-i18n-aria-label="languageLabel">
+          <button class="language-button" data-language-option="zh_CN" type="button">中文</button>
+          <button class="language-button" data-language-option="en" type="button">EN</button>
+        </div>
+      </section>
+
+      <section class="actions" aria-label="截图操作" data-i18n-aria-label="captureActions">
         <button id="fullPageButton" class="action-button" type="button">
           <span class="button-icon" aria-hidden="true">⌁</span>
-          <span>全页截图</span>
+          <span data-i18n="fullPage">全页截图</span>
         </button>
         <button id="customAreaButton" class="action-button" type="button">
           <span class="button-icon" aria-hidden="true">□</span>
-          <span>自定义截图</span>
+          <span data-i18n="customArea">自定义截图</span>
         </button>
         <button id="elementButton" class="action-button" type="button">
           <span class="button-icon" aria-hidden="true">◇</span>
-          <span>元素截图</span>
+          <span data-i18n="element">元素截图</span>
         </button>
         <button id="scrollElementButton" class="action-button" type="button">
           <span class="button-icon" aria-hidden="true">↕</span>
-          <span>滚动元素截图</span>
+          <span data-i18n="scrollElement">滚动元素截图</span>
         </button>
       </section>
 
-      <section class="delay-panel" aria-label="延迟截图">
-        <label for="delaySelect">延迟</label>
+      <section class="delay-panel" aria-label="延迟截图" data-i18n-aria-label="delayCapture">
+        <label for="delaySelect" data-i18n="delay">延迟</label>
         <select id="delaySelect">
-          <option value="0">立即截图</option>
-          <option value="2">2 秒后</option>
-          <option value="3">3 秒后</option>
-          <option value="5">5 秒后</option>
+          <option value="0" data-i18n="delayNow">立即截图</option>
+          <option value="2" data-i18n="delay2">2 秒后</option>
+          <option value="3" data-i18n="delay3">3 秒后</option>
+          <option value="5" data-i18n="delay5">5 秒后</option>
         </select>
       </section>
 
-      <section class="shortcut-panel" aria-label="快捷键">
-        <span>Alt+Shift+F 全页</span>
-        <span>Alt+Shift+S 区域</span>
+      <section class="shortcut-panel" aria-label="快捷键" data-i18n-aria-label="shortcuts">
+        <span data-i18n="shortcutFull">Alt+Shift+F 全页</span>
+        <span data-i18n="shortcutArea">Alt+Shift+S 区域</span>
       </section>
 
       <button id="feedbackButton" class="feedback-button" type="button">
-        <span>反馈</span>
+        <span data-i18n="feedback">反馈</span>
         <span class="feedback-email">somnus0917chen@hotmail.com</span>
       </button>
 
-      <section class="history-panel" aria-label="截图历史">
+      <section class="history-panel" aria-label="截图历史" data-i18n-aria-label="history">
         <div class="section-title">
-          <span>最近截图</span>
+          <span data-i18n="recentScreenshots">最近截图</span>
           <div class="history-title-actions">
             <span id="historyCount"></span>
-            <button id="clearHistoryButton" class="text-button" type="button">清空</button>
+            <button id="clearHistoryButton" class="text-button" type="button" data-i18n="clear">清空</button>
           </div>
         </div>
         <div id="historyList" class="history-list">
-          <p class="empty-history">暂无历史</p>
+          <p class="empty-history" data-i18n="emptyHistory">暂无历史</p>
         </div>
       </section>
 

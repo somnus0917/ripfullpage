@@ -17,16 +17,20 @@
           </div>
         </div>
 
-        <div class="toolbar-actions" aria-label="文件操作">
-          <button id="undoButton" class="button" type="button">撤销</button>
-          <button id="redoButton" class="button" type="button">重做</button>
-          <button id="applyCropButton" class="button primary" type="button">确认裁剪</button>
-          <button id="resetButton" class="button" type="button">重置</button>
-          <button id="copyButton" class="button" type="button">复制</button>
-          <button id="watermarkButton" class="button" type="button">水印</button>
-          <button id="shareButton" class="button" type="button">分享</button>
+        <div class="toolbar-actions" aria-label="文件操作" data-i18n-aria-label="fileActions">
+          <div class="language-toggle editor-language-toggle" role="group" aria-label="语言" data-i18n-aria-label="languageLabel">
+            <button class="language-button" data-language-option="zh_CN" type="button">中文</button>
+            <button class="language-button" data-language-option="en" type="button">EN</button>
+          </div>
+          <button id="undoButton" class="button" type="button" data-i18n="undo">撤销</button>
+          <button id="redoButton" class="button" type="button" data-i18n="redo">重做</button>
+          <button id="applyCropButton" class="button primary" type="button" data-i18n="applyCrop">确认裁剪</button>
+          <button id="resetButton" class="button" type="button" data-i18n="reset">重置</button>
+          <button id="copyButton" class="button" type="button" data-i18n="copy">复制</button>
+          <button id="watermarkButton" class="button" type="button" data-i18n="watermark">水印</button>
+          <button id="shareButton" class="button" type="button" data-i18n="share">分享</button>
           <label class="toolbar-select-label">
-            <span>格式</span>
+            <span data-i18n="format">格式</span>
             <select id="formatSelect">
               <option value="image/png">PNG</option>
               <option value="image/jpeg">JPG</option>
@@ -34,27 +38,27 @@
             </select>
           </label>
           <label class="toolbar-range-label">
-            <span>质量</span>
+            <span data-i18n="quality">质量</span>
             <input id="qualityInput" type="range" min="50" max="100" value="92">
           </label>
-          <button id="downloadButton" class="button" type="button">下载图片</button>
-          <button id="downloadPdfButton" class="button" type="button">导出 PDF</button>
+          <button id="downloadButton" class="button" type="button" data-i18n="downloadImage">下载图片</button>
+          <button id="downloadPdfButton" class="button" type="button" data-i18n="exportPdf">导出 PDF</button>
         </div>
       </header>
 
       <div class="editor-layout">
-        <aside class="side-tools" aria-label="编辑工具">
-          <div class="tool-group" role="group" aria-label="编辑工具">
-            <button class="tool-button active" data-tool="crop" type="button" title="裁剪">裁剪</button>
-            <button class="tool-button" data-tool="pen" type="button" title="画笔">画笔</button>
-            <button class="tool-button" data-tool="marker" type="button" title="高亮">高亮</button>
-            <button class="tool-button" data-tool="rect" type="button" title="矩形">矩形</button>
-            <button class="tool-button" data-tool="ellipse" type="button" title="椭圆">椭圆</button>
-            <button class="tool-button" data-tool="arrow" type="button" title="箭头">箭头</button>
-            <button class="tool-button" data-tool="text" type="button" title="文字">文字</button>
-            <button class="tool-button" data-tool="mosaic" type="button" title="马赛克">马赛克</button>
-            <button class="tool-button blur-tool" data-tool="blur" type="button" title="模糊">模糊</button>
-            <button class="tool-button" data-tool="sticker" type="button" title="贴图">贴图</button>
+        <aside class="side-tools" aria-label="编辑工具" data-i18n-aria-label="editTools">
+          <div class="tool-group" role="group" aria-label="编辑工具" data-i18n-aria-label="editTools">
+            <button class="tool-button active" data-tool="crop" type="button" title="裁剪" data-i18n="toolCrop" data-i18n-title="toolCrop">裁剪</button>
+            <button class="tool-button" data-tool="pen" type="button" title="画笔" data-i18n="toolPen" data-i18n-title="toolPen">画笔</button>
+            <button class="tool-button" data-tool="marker" type="button" title="高亮" data-i18n="toolMarker" data-i18n-title="toolMarker">高亮</button>
+            <button class="tool-button" data-tool="rect" type="button" title="矩形" data-i18n="toolRect" data-i18n-title="toolRect">矩形</button>
+            <button class="tool-button" data-tool="ellipse" type="button" title="椭圆" data-i18n="toolEllipse" data-i18n-title="toolEllipse">椭圆</button>
+            <button class="tool-button" data-tool="arrow" type="button" title="箭头" data-i18n="toolArrow" data-i18n-title="toolArrow">箭头</button>
+            <button class="tool-button" data-tool="text" type="button" title="文字" data-i18n="toolText" data-i18n-title="toolText">文字</button>
+            <button class="tool-button" data-tool="mosaic" type="button" title="马赛克" data-i18n="toolMosaic" data-i18n-title="toolMosaic">马赛克</button>
+            <button class="tool-button blur-tool" data-tool="blur" type="button" title="模糊" data-i18n="toolBlur" data-i18n-title="toolBlur">模糊</button>
+            <button class="tool-button" data-tool="sticker" type="button" title="贴图" data-i18n="toolSticker" data-i18n-title="toolSticker">贴图</button>
           </div>
 
           <div class="tool-controls">
@@ -63,34 +67,34 @@
                 <label id="privacyStrengthLabel" class="field-label" for="privacyStrengthInput">强度</label>
                 <span id="privacyStrengthValue">5</span>
               </div>
-              <label class="range-label" title="打码强度">
+              <label class="range-label" title="打码强度" data-i18n-title="privacyStrength">
                 <input id="privacyStrengthInput" type="range" min="1" max="10" value="5">
               </label>
             </div>
 
-            <label class="field-label" for="colorInput">颜色</label>
-            <label class="control-label" title="颜色">
+            <label class="field-label" for="colorInput" data-i18n="color">颜色</label>
+            <label class="control-label" title="颜色" data-i18n-title="color">
               <input id="colorInput" type="color" value="#ef4444">
             </label>
 
-            <label class="field-label" for="sizeInput">粗细</label>
-            <label class="range-label" title="粗细">
+            <label class="field-label" for="sizeInput" data-i18n="strokeSize">粗细</label>
+            <label class="range-label" title="粗细" data-i18n-title="strokeSize">
               <input id="sizeInput" type="range" min="2" max="48" value="6">
             </label>
 
-            <label class="field-label" for="fontSizeInput">字号</label>
-            <label class="range-label" title="字号">
+            <label class="field-label" for="fontSizeInput" data-i18n="fontSize">字号</label>
+            <label class="range-label" title="字号" data-i18n-title="fontSize">
               <input id="fontSizeInput" type="range" min="12" max="96" value="28">
             </label>
           </div>
         </aside>
 
-        <section class="workspace" aria-label="截图预览">
+        <section class="workspace" aria-label="截图预览" data-i18n-aria-label="screenshotPreview">
           <div id="dimensionBadge" class="dimension-badge">0 x 0px</div>
           <div id="stage" class="stage">
             <div id="imageWrap" class="image-wrap">
-              <img id="previewImage" alt="截图预览">
-              <canvas id="editCanvas" aria-label="编辑图层"></canvas>
+              <img id="previewImage" alt="截图预览" data-i18n-alt="screenshotPreview">
+              <canvas id="editCanvas" aria-label="编辑图层" data-i18n-aria-label="editLayer"></canvas>
               <div id="cropBox" class="crop-box" hidden>
                 <span class="handle handle-n" data-handle="n"></span>
                 <span class="handle handle-ne" data-handle="ne"></span>
@@ -109,44 +113,44 @@
 
       <div id="watermarkPanel" class="watermark-panel" hidden>
         <label class="watermark-field" for="watermarkTextInput">
-          <span>水印文字</span>
-          <input id="watermarkTextInput" type="text" placeholder="输入水印文字">
+          <span data-i18n="watermarkText">水印文字</span>
+          <input id="watermarkTextInput" type="text" placeholder="输入水印文字" data-i18n-placeholder="watermarkPlaceholder">
         </label>
 
         <div class="watermark-field">
-          <span>位置</span>
-          <div class="watermark-position-grid" role="group" aria-label="水印位置">
-            <button class="watermark-position-button" data-watermark-position="top-left" type="button" title="左上">↖</button>
-            <button class="watermark-position-button" data-watermark-position="top-right" type="button" title="右上">↗</button>
-            <button class="watermark-position-button active" data-watermark-position="bottom-right" type="button" title="右下">↘</button>
-            <button class="watermark-position-button" data-watermark-position="bottom-left" type="button" title="左下">↙</button>
-            <button class="watermark-position-button" data-watermark-position="center" type="button" title="居中">⊙</button>
+          <span data-i18n="position">位置</span>
+          <div class="watermark-position-grid" role="group" aria-label="水印位置" data-i18n-aria-label="watermarkPosition">
+            <button class="watermark-position-button" data-watermark-position="top-left" type="button" title="左上" data-i18n-title="topLeft">↖</button>
+            <button class="watermark-position-button" data-watermark-position="top-right" type="button" title="右上" data-i18n-title="topRight">↗</button>
+            <button class="watermark-position-button active" data-watermark-position="bottom-right" type="button" title="右下" data-i18n-title="bottomRight">↘</button>
+            <button class="watermark-position-button" data-watermark-position="bottom-left" type="button" title="左下" data-i18n-title="bottomLeft">↙</button>
+            <button class="watermark-position-button" data-watermark-position="center" type="button" title="居中" data-i18n-title="center">⊙</button>
           </div>
         </div>
 
         <label class="watermark-field" for="watermarkFontSizeInput">
-          <span>字号</span>
+          <span data-i18n="fontSize">字号</span>
           <input id="watermarkFontSizeInput" type="range" min="12" max="36" value="22">
         </label>
 
         <label class="watermark-field" for="watermarkOpacityInput">
-          <span>透明度</span>
+          <span data-i18n="opacity">透明度</span>
           <input id="watermarkOpacityInput" type="range" min="10" max="100" value="72">
         </label>
 
         <div class="watermark-field">
-          <span>颜色</span>
-          <div class="watermark-color-row" role="group" aria-label="水印颜色">
-            <button class="watermark-color-button active" data-watermark-color="#ffffff" type="button" title="白色"></button>
-            <button class="watermark-color-button" data-watermark-color="#000000" type="button" title="黑色"></button>
-            <button class="watermark-color-button" data-watermark-color="#94a3b8" type="button" title="灰色"></button>
-            <button class="watermark-color-button" data-watermark-color="#ef4444" type="button" title="红色"></button>
+          <span data-i18n="color">颜色</span>
+          <div class="watermark-color-row" role="group" aria-label="水印颜色" data-i18n-aria-label="watermarkColor">
+            <button class="watermark-color-button active" data-watermark-color="#ffffff" type="button" title="白色" data-i18n-title="white"></button>
+            <button class="watermark-color-button" data-watermark-color="#000000" type="button" title="黑色" data-i18n-title="black"></button>
+            <button class="watermark-color-button" data-watermark-color="#94a3b8" type="button" title="灰色" data-i18n-title="gray"></button>
+            <button class="watermark-color-button" data-watermark-color="#ef4444" type="button" title="红色" data-i18n-title="red"></button>
           </div>
         </div>
 
         <div class="watermark-actions">
-          <button id="applyWatermarkButton" class="button primary" type="button">应用水印</button>
-          <button id="cancelWatermarkButton" class="button" type="button">取消</button>
+          <button id="applyWatermarkButton" class="button primary" type="button" data-i18n="applyWatermark">应用水印</button>
+          <button id="cancelWatermarkButton" class="button" type="button" data-i18n="cancel">取消</button>
         </div>
       </div>
       <input id="stickerInput" type="file" accept="image/*" hidden>

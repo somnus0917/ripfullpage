@@ -1,9 +1,137 @@
 // Screenshot editor. It supports crop, annotation, mosaic, undo/redo, reset, copy, share, and export.
 
 const EDITOR_IMAGE_KEY = 'ripfullpage:lastImage';
+const LANGUAGE_KEY = 'ripfullpage:language';
 const MIN_CROP_SIZE = 20;
 const MAX_HISTORY = 30;
 const WATERMARK_PADDING = 16;
+const DEFAULT_LANGUAGE = 'zh_CN';
+const TRANSLATIONS = {
+  zh_CN: {
+    languageLabel: '语言',
+    fileActions: '文件操作',
+    undo: '撤销',
+    redo: '重做',
+    applyCrop: '确认裁剪',
+    reset: '重置',
+    copy: '复制',
+    watermark: '水印',
+    share: '分享',
+    format: '格式',
+    quality: '质量',
+    downloadImage: '下载图片',
+    exportPdf: '导出 PDF',
+    editTools: '编辑工具',
+    toolCrop: '裁剪',
+    toolPen: '画笔',
+    toolMarker: '高亮',
+    toolRect: '矩形',
+    toolEllipse: '椭圆',
+    toolArrow: '箭头',
+    toolText: '文字',
+    toolMosaic: '马赛克',
+    toolBlur: '模糊',
+    toolSticker: '贴图',
+    privacyStrength: '打码强度',
+    blurStrength: '模糊强度',
+    mosaicStrength: '马赛克强度',
+    color: '颜色',
+    strokeSize: '粗细',
+    fontSize: '字号',
+    screenshotPreview: '截图预览',
+    editLayer: '编辑图层',
+    watermarkText: '水印文字',
+    watermarkPlaceholder: '输入水印文字',
+    position: '位置',
+    watermarkPosition: '水印位置',
+    topLeft: '左上',
+    topRight: '右上',
+    bottomRight: '右下',
+    bottomLeft: '左下',
+    center: '居中',
+    opacity: '透明度',
+    watermarkColor: '水印颜色',
+    white: '白色',
+    black: '黑色',
+    gray: '灰色',
+    red: '红色',
+    applyWatermark: '应用水印',
+    cancel: '取消',
+    loadingScreenshot: '正在载入截图...',
+    noScreenshotData: '没有找到截图数据',
+    textPrompt: '输入文字',
+    clipboardUnsupported: '当前浏览器不支持图片剪贴板。',
+    copying: '复制中...',
+    copied: '已复制',
+    copyFailed: '复制失败，请确认浏览器允许剪贴板访问。',
+    sharing: '分享中...',
+    shareFailed: '分享失败，已保留复制/下载方式。',
+    exporting: '正在导出...',
+    pdfFailed: '导出 PDF 失败，图片可能过大。请尝试先裁剪后再导出。'
+  },
+  en: {
+    languageLabel: 'Language',
+    fileActions: 'File actions',
+    undo: 'Undo',
+    redo: 'Redo',
+    applyCrop: 'Apply crop',
+    reset: 'Reset',
+    copy: 'Copy',
+    watermark: 'Watermark',
+    share: 'Share',
+    format: 'Format',
+    quality: 'Quality',
+    downloadImage: 'Download image',
+    exportPdf: 'Export PDF',
+    editTools: 'Editing tools',
+    toolCrop: 'Crop',
+    toolPen: 'Pen',
+    toolMarker: 'Highlight',
+    toolRect: 'Rectangle',
+    toolEllipse: 'Ellipse',
+    toolArrow: 'Arrow',
+    toolText: 'Text',
+    toolMosaic: 'Mosaic',
+    toolBlur: 'Blur',
+    toolSticker: 'Sticker',
+    privacyStrength: 'Privacy strength',
+    blurStrength: 'Blur strength',
+    mosaicStrength: 'Mosaic strength',
+    color: 'Color',
+    strokeSize: 'Stroke',
+    fontSize: 'Font size',
+    screenshotPreview: 'Screenshot preview',
+    editLayer: 'Edit layer',
+    watermarkText: 'Watermark text',
+    watermarkPlaceholder: 'Enter watermark text',
+    position: 'Position',
+    watermarkPosition: 'Watermark position',
+    topLeft: 'Top left',
+    topRight: 'Top right',
+    bottomRight: 'Bottom right',
+    bottomLeft: 'Bottom left',
+    center: 'Center',
+    opacity: 'Opacity',
+    watermarkColor: 'Watermark color',
+    white: 'White',
+    black: 'Black',
+    gray: 'Gray',
+    red: 'Red',
+    applyWatermark: 'Apply watermark',
+    cancel: 'Cancel',
+    loadingScreenshot: 'Loading screenshot...',
+    noScreenshotData: 'No screenshot data found',
+    textPrompt: 'Enter text',
+    clipboardUnsupported: 'This browser does not support image clipboard access.',
+    copying: 'Copying...',
+    copied: 'Copied',
+    copyFailed: 'Copy failed. Please allow clipboard access in your browser.',
+    sharing: 'Sharing...',
+    shareFailed: 'Share failed. Copy and download are still available.',
+    exporting: 'Exporting...',
+    pdfFailed: 'PDF export failed. The image may be too large. Try cropping it first.'
+  }
+};
 
 const previewImage = document.getElementById('previewImage');
 const editCanvas = document.getElementById('editCanvas');
@@ -41,6 +169,7 @@ const cancelWatermarkButton = document.getElementById('cancelWatermarkButton');
 const watermarkPositionButtons = Array.from(document.querySelectorAll('[data-watermark-position]'));
 const watermarkColorButtons = Array.from(document.querySelectorAll('[data-watermark-color]'));
 const toolButtons = Array.from(document.querySelectorAll('[data-tool]'));
+const languageButtons = Array.from(document.querySelectorAll('[data-language-option]'));
 
 let originalDataURL = '';
 let currentDataURL = '';
@@ -55,10 +184,21 @@ let redoStack = [];
 let pendingStickerPoint = null;
 let watermarkPosition = 'bottom-right';
 let watermarkColor = '#ffffff';
+let currentLanguage = DEFAULT_LANGUAGE;
 
 init();
 
+for (const button of languageButtons) {
+  button.addEventListener('click', () => {
+    setLanguage(button.dataset.languageOption);
+  });
+}
+
 async function init() {
+  await loadLanguage();
+  applyI18n();
+  imageMeta.textContent = t('loadingScreenshot');
+
   const stored = await chrome.storage.session.get([
     EDITOR_IMAGE_KEY,
     'ripfullpage:sourceURL',
@@ -68,7 +208,7 @@ async function init() {
   const item = stored[EDITOR_IMAGE_KEY];
 
   if (!item || !item.dataURL) {
-    imageMeta.textContent = '没有找到截图数据';
+    imageMeta.textContent = t('noScreenshotData');
     setButtonsEnabled(false);
     return;
   }
@@ -82,6 +222,62 @@ async function init() {
   await loadPreview(currentDataURL);
   setActiveTool(activeTool);
   updateHistoryButtons();
+}
+
+async function loadLanguage() {
+  const stored = await chrome.storage.local.get(LANGUAGE_KEY);
+  currentLanguage = normalizeLanguage(stored[LANGUAGE_KEY]);
+}
+
+async function setLanguage(language) {
+  currentLanguage = normalizeLanguage(language);
+  await chrome.storage.local.set({ [LANGUAGE_KEY]: currentLanguage });
+  applyI18n();
+  updatePrivacyControls();
+}
+
+function normalizeLanguage(language) {
+  return Object.prototype.hasOwnProperty.call(TRANSLATIONS, language)
+    ? language
+    : DEFAULT_LANGUAGE;
+}
+
+function t(key) {
+  return (
+    TRANSLATIONS[currentLanguage] &&
+    TRANSLATIONS[currentLanguage][key]
+  ) || TRANSLATIONS[DEFAULT_LANGUAGE][key] || key;
+}
+
+function applyI18n() {
+  document.documentElement.lang = currentLanguage === 'en' ? 'en' : 'zh-CN';
+
+  for (const element of document.querySelectorAll('[data-i18n]')) {
+    element.textContent = t(element.dataset.i18n);
+  }
+
+  for (const element of document.querySelectorAll('[data-i18n-title]')) {
+    element.title = t(element.dataset.i18nTitle);
+  }
+
+  for (const element of document.querySelectorAll('[data-i18n-placeholder]')) {
+    element.placeholder = t(element.dataset.i18nPlaceholder);
+  }
+
+  for (const element of document.querySelectorAll('[data-i18n-alt]')) {
+    element.alt = t(element.dataset.i18nAlt);
+  }
+
+  for (const element of document.querySelectorAll('[data-i18n-aria-label]')) {
+    element.setAttribute('aria-label', t(element.dataset.i18nAriaLabel));
+  }
+
+  for (const button of languageButtons) {
+    const isActive = button.dataset.languageOption === currentLanguage;
+
+    button.classList.toggle('active', isActive);
+    button.setAttribute('aria-pressed', String(isActive));
+  }
 }
 
 function getStoredSourceURL(stored, item) {
@@ -136,6 +332,7 @@ function bindEvents() {
       setWatermarkColor(button.dataset.watermarkColor);
     });
   }
+
 }
 
 function onEditorKeyDown(event) {
@@ -250,7 +447,7 @@ function updatePrivacyControls() {
   const isPrivacyTool = activeTool === 'mosaic' || activeTool === 'blur';
 
   privacyControls.hidden = !isPrivacyTool;
-  privacyStrengthLabel.textContent = activeTool === 'blur' ? '模糊强度' : '马赛克强度';
+  privacyStrengthLabel.textContent = activeTool === 'blur' ? t('blurStrength') : t('mosaicStrength');
   privacyStrengthValue.textContent = privacyStrengthInput.value;
 }
 
@@ -390,7 +587,7 @@ async function endEditDrag(event) {
   }
 
   if (state.tool === 'text') {
-    const text = window.prompt('输入文字');
+    const text = window.prompt(t('textPrompt'));
 
     if (!text) {
       clearEditCanvas();
@@ -1021,7 +1218,7 @@ async function downloadImage() {
 
 async function copyImageToClipboard() {
   if (!navigator.clipboard || typeof ClipboardItem === 'undefined') {
-    window.alert('当前浏览器不支持图片剪贴板。');
+    window.alert(t('clipboardUnsupported'));
     return;
   }
 
@@ -1029,7 +1226,7 @@ async function copyImageToClipboard() {
 
   try {
     copyButton.disabled = true;
-    copyButton.textContent = '复制中...';
+    copyButton.textContent = t('copying');
     const blob = await createOutputBlob('image/png');
 
     await navigator.clipboard.write([
@@ -1037,7 +1234,7 @@ async function copyImageToClipboard() {
         [blob.type]: blob
       })
     ]);
-    copyButton.textContent = '已复制';
+    copyButton.textContent = t('copied');
     window.setTimeout(() => {
       copyButton.textContent = originalText;
       copyButton.disabled = false;
@@ -1046,7 +1243,7 @@ async function copyImageToClipboard() {
     console.error('[ripfullpage] Copy failed:', error);
     copyButton.textContent = originalText;
     copyButton.disabled = false;
-    window.alert('复制失败，请确认浏览器允许剪贴板访问。');
+    window.alert(t('copyFailed'));
   }
 }
 
@@ -1068,7 +1265,7 @@ async function shareImage() {
     }
 
     shareButton.disabled = true;
-    shareButton.textContent = '分享中...';
+    shareButton.textContent = t('sharing');
     await navigator.share({
       title: 'ripfullpage screenshot',
       files: [file]
@@ -1076,7 +1273,7 @@ async function shareImage() {
   } catch (error) {
     if (error && error.name !== 'AbortError') {
       console.error('[ripfullpage] Share failed:', error);
-      window.alert('分享失败，已保留复制/下载方式。');
+      window.alert(t('shareFailed'));
     }
   } finally {
     shareButton.textContent = originalText;
@@ -1143,7 +1340,7 @@ async function downloadPdf() {
 
   try {
     downloadPdfButton.disabled = true;
-    downloadPdfButton.textContent = '正在导出...';
+    downloadPdfButton.textContent = t('exporting');
 
     const image = await loadImage(currentDataURL);
     const pages = await createPdfImagePages(image);
@@ -1159,7 +1356,7 @@ async function downloadPdf() {
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   } catch (error) {
     console.error('[ripfullpage] PDF export failed:', error);
-    window.alert('导出 PDF 失败，图片可能过大。请尝试先裁剪后再导出。');
+    window.alert(t('pdfFailed'));
   } finally {
     downloadPdfButton.textContent = originalText;
     downloadPdfButton.disabled = false;

@@ -3,8 +3,28 @@
 
 const EDITOR_IMAGE_KEY = 'ripfullpage:lastImage';
 const HISTORY_KEY = 'ripfullpage:history';
+const LANGUAGE_KEY = 'ripfullpage:language';
 const MAX_HISTORY_ITEMS = 12;
 const MIN_CAPTURE_INTERVAL_MS = 650;
+const DEFAULT_LANGUAGE = 'zh_CN';
+const TRANSLATIONS = {
+  zh_CN: {
+    noActiveTab: '没有找到当前标签页。',
+    restrictedPage: '浏览器扩展无法截取此页面。',
+    cannotIdentifyTab: '无法识别要截图的标签页。',
+    missingScreenshotData: '缺少截图数据。',
+    missingHistoryItemId: '缺少历史截图 ID。',
+    historyItemNotFound: '没有找到这张历史截图。'
+  },
+  en: {
+    noActiveTab: 'No active tab found.',
+    restrictedPage: 'This page cannot be captured by browser extensions.',
+    cannotIdentifyTab: 'Cannot identify the tab to capture.',
+    missingScreenshotData: 'Missing screenshot data.',
+    missingHistoryItemId: 'Missing history item id.',
+    historyItemNotFound: 'History item not found.'
+  }
+};
 
 let lastVisibleCaptureAt = 0;
 
@@ -66,14 +86,15 @@ chrome.commands.onCommand.addListener((command) => {
 });
 
 async function startCaptureFlow(flowAction, options = {}) {
+  const language = await getPreferredLanguage(options.language);
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
   if (!tab || !tab.id) {
-    throw new Error('No active tab found.');
+    throw new Error(t('noActiveTab', language));
   }
 
   if (isRestrictedUrl(tab.url)) {
-    throw new Error('This page cannot be captured by browser extensions.');
+    throw new Error(t('restrictedPage', language));
   }
 
   await ensureContentScript(tab.id);
@@ -88,7 +109,8 @@ async function startCaptureFlow(flowAction, options = {}) {
 
   await chrome.tabs.sendMessage(tab.id, {
     action,
-    delaySeconds: normalizeDelaySeconds(options.delaySeconds)
+    delaySeconds: normalizeDelaySeconds(options.delaySeconds),
+    language
   });
 }
 
@@ -106,7 +128,9 @@ async function ensureContentScript(tabId) {
 
 async function captureCurrentTab(tab) {
   if (!tab || typeof tab.windowId !== 'number') {
-    throw new Error('Cannot identify the tab to capture.');
+    const language = await getPreferredLanguage();
+
+    throw new Error(t('cannotIdentifyTab', language));
   }
 
   await waitForCaptureSlot();
@@ -131,7 +155,9 @@ async function waitForCaptureSlot() {
 
 async function openEditor(dataURL) {
   if (!dataURL || typeof dataURL !== 'string') {
-    throw new Error('Missing screenshot data.');
+    const language = await getPreferredLanguage();
+
+    throw new Error(t('missingScreenshotData', language));
   }
 
   try {
@@ -155,7 +181,9 @@ async function openEditor(dataURL) {
 
 async function openHistoryItem(id) {
   if (!id) {
-    throw new Error('Missing history item id.');
+    const language = await getPreferredLanguage();
+
+    throw new Error(t('missingHistoryItemId', language));
   }
 
   const stored = await chrome.storage.local.get(HISTORY_KEY);
@@ -163,7 +191,9 @@ async function openHistoryItem(id) {
   const item = history.find((entry) => entry.id === id);
 
   if (!item || !item.dataURL) {
-    throw new Error('History item not found.');
+    const language = await getPreferredLanguage();
+
+    throw new Error(t('historyItemNotFound', language));
   }
 
   await chrome.storage.session.set({
@@ -241,6 +271,29 @@ function normalizeDelaySeconds(value) {
   }
 
   return Math.max(0, Math.min(5, Math.round(seconds)));
+}
+
+async function getPreferredLanguage(language) {
+  if (isSupportedLanguage(language)) {
+    return language;
+  }
+
+  const stored = await chrome.storage.local.get(LANGUAGE_KEY);
+
+  return isSupportedLanguage(stored[LANGUAGE_KEY])
+    ? stored[LANGUAGE_KEY]
+    : DEFAULT_LANGUAGE;
+}
+
+function isSupportedLanguage(language) {
+  return Object.prototype.hasOwnProperty.call(TRANSLATIONS, language);
+}
+
+function t(key, language = DEFAULT_LANGUAGE) {
+  return (
+    TRANSLATIONS[language] &&
+    TRANSLATIONS[language][key]
+  ) || TRANSLATIONS[DEFAULT_LANGUAGE][key] || key;
 }
 
 function isRestrictedUrl(url = '') {

@@ -14,12 +14,74 @@
   const MAX_DEFAULT_FULL_PAGE_TILES = 50;
   const MAX_DEFAULT_FULL_PAGE_HEIGHT = 30000;
   const MIN_SELECTION_SIZE = 4;
+  const DEFAULT_LANGUAGE = "zh_CN";
+  const TRANSLATIONS = {
+    zh_CN: {
+      fullPageFailed: "全页截图失败：{message}",
+      elementFailed: "元素截图失败：{message}",
+      scrollElementFailed: "滚动元素截图失败：{message}",
+      preparingFullPage: "正在准备全页截图，共 {total} 张分块...",
+      capturingProgress: "正在截图 {captured}/{total}...",
+      stitchingScreenshot: "正在拼接截图...",
+      scrollTargetMissing: "滚动区域已不存在。",
+      scrollTargetTooSmall: "滚动区域太小，无法截图。",
+      preparingScrollElement: "正在准备滚动元素截图，共 {total} 张分块...",
+      stitchingScrollElement: "正在拼接滚动元素截图...",
+      pageTooLongTitle: "页面过长",
+      pageTooLongMessage: "这个页面可能是无限滚动或超长页面，完整截图容易卡住或占用大量内存。",
+      pageTooLongMeta: "预计 {totalTiles} 张分块，页面高度 {pageHeight}px。推荐限制为 {limitedTiles} 张分块，约 {limitedHeight}px。",
+      limitCapture: "限制截图",
+      continueFullCapture: "继续完整截图",
+      cancel: "取消",
+      selectElement: "点击选择元素，ESC 取消",
+      selectScrollableElement: "点击选择内部滚动区域，ESC 取消",
+      moveToScrollable: "移动到有内部滚动条的区域",
+      clickScrollable: "请点击有内部滚动条的区域。",
+      scrollBoth: "横纵滚动",
+      scrollX: "横向滚动",
+      scrollY: "纵向滚动",
+      scrollAreaMustBeVisible: "请先将滚动区域完整显示在窗口内再截图。",
+      delayedCapture: "将在 {second} 秒后截图...",
+      capturingNow: "正在截图..."
+    },
+    en: {
+      fullPageFailed: "Full page capture failed: {message}",
+      elementFailed: "Element capture failed: {message}",
+      scrollElementFailed: "Scrollable element capture failed: {message}",
+      preparingFullPage: "Preparing full page capture, {total} tiles...",
+      capturingProgress: "Capturing {captured}/{total}...",
+      stitchingScreenshot: "Stitching screenshot...",
+      scrollTargetMissing: "The scrollable area no longer exists.",
+      scrollTargetTooSmall: "The scrollable area is too small to capture.",
+      preparingScrollElement: "Preparing scrollable element capture, {total} tiles...",
+      stitchingScrollElement: "Stitching scrollable element screenshot...",
+      pageTooLongTitle: "Page is too long",
+      pageTooLongMessage: "This page may be infinite or very long. A full capture can freeze the browser or use a lot of memory.",
+      pageTooLongMeta: "Estimated {totalTiles} tiles, page height {pageHeight}px. Recommended limit: {limitedTiles} tiles, about {limitedHeight}px.",
+      limitCapture: "Limit capture",
+      continueFullCapture: "Continue full capture",
+      cancel: "Cancel",
+      selectElement: "Click an element, Esc to cancel",
+      selectScrollableElement: "Click a scrollable area, Esc to cancel",
+      moveToScrollable: "Move to an internally scrollable area",
+      clickScrollable: "Please click an area with its own scrollbar.",
+      scrollBoth: "Both axes",
+      scrollX: "Horizontal",
+      scrollY: "Vertical",
+      scrollAreaMustBeVisible: "Make the entire scrollable area visible in the window before capturing.",
+      delayedCapture: "Capturing in {second}s...",
+      capturingNow: "Capturing..."
+    }
+  };
   let activeToast = null;
+  let currentLanguage = DEFAULT_LANGUAGE;
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (!message || typeof message.action !== "string") {
       return false;
     }
+
+    currentLanguage = normalizeLanguage(message.language);
 
     if (message.action === "startCapture") {
       sendResponse({ ok: true });
@@ -27,7 +89,7 @@
         delaySeconds: message.delaySeconds,
       }).catch((error) => {
         console.error("[ripfullpage] Full page capture failed:", error);
-        showToast(`全页截图失败：${error.message}`, true);
+        showToast(t("fullPageFailed", { message: error.message }), true);
       });
       return false;
     }
@@ -48,7 +110,7 @@
         delaySeconds: message.delaySeconds,
       }).catch((error) => {
         console.error("[ripfullpage] Element capture failed:", error);
-        showToast(`元素截图失败：${error.message}`, true);
+        showToast(t("elementFailed", { message: error.message }), true);
       });
       return false;
     }
@@ -59,7 +121,7 @@
         delaySeconds: message.delaySeconds,
       }).catch((error) => {
         console.error("[ripfullpage] Scrollable element capture failed:", error);
-        showToast(`滚动元素截图失败：${error.message}`, true);
+        showToast(t("scrollElementFailed", { message: error.message }), true);
       });
       return false;
     }
@@ -113,7 +175,7 @@
 
     document.documentElement.style.scrollBehavior = "auto";
     document.documentElement.classList.add("ripfullpage-capturing");
-    showToast(`正在准备全页截图，共 ${totalTiles} 张分块...`, false, 0);
+    showToast(t("preparingFullPage", { total: totalTiles }), false, 0);
 
     try {
       for (const y of yPositions) {
@@ -130,7 +192,10 @@
 
           capturedTiles += 1;
           showToast(
-            `正在截图 ${capturedTiles}/${totalTiles}...`,
+            t("capturingProgress", {
+              captured: capturedTiles,
+              total: totalTiles,
+            }),
             false,
             capturedTiles / totalTiles,
           );
@@ -152,7 +217,7 @@
         tileGrid.push(row);
       }
 
-      showToast("正在拼接截图...");
+      showToast(t("stitchingScreenshot"));
       const stitchedDataURL = stitchTiles(
         tileGrid,
         capturePageSize,
@@ -312,7 +377,7 @@
       !scrollTarget.isConnected ||
       !viewportTarget.isConnected
     ) {
-      throw new Error("滚动区域已不存在。");
+      throw new Error(t("scrollTargetMissing"));
     }
 
     const originalScrollLeft = scrollTarget.scrollLeft;
@@ -341,7 +406,7 @@
         captureViewport.width < MIN_SELECTION_SIZE ||
         captureViewport.height < MIN_SELECTION_SIZE
       ) {
-        throw new Error("滚动区域太小，无法截图。");
+        throw new Error(t("scrollTargetTooSmall"));
       }
 
       xPositions = buildScrollPositions(
@@ -376,7 +441,7 @@
       let scaleX = window.devicePixelRatio || 1;
       let scaleY = window.devicePixelRatio || 1;
 
-      showToast(`正在准备滚动元素截图，共 ${totalTiles} 张分块...`, false, 0);
+      showToast(t("preparingScrollElement", { total: totalTiles }), false, 0);
 
       for (const y of yPositions) {
         const row = [];
@@ -388,7 +453,10 @@
 
           capturedTiles += 1;
           showToast(
-            `正在截图 ${capturedTiles}/${totalTiles}...`,
+            t("capturingProgress", {
+              captured: capturedTiles,
+              total: totalTiles,
+            }),
             false,
             capturedTiles / totalTiles,
           );
@@ -412,7 +480,7 @@
         tileGrid.push(row);
       }
 
-      showToast("正在拼接滚动元素截图...");
+      showToast(t("stitchingScrollElement"));
       const stitchedDataURL = stitchTiles(
         tileGrid,
         capturePageSize,
@@ -706,15 +774,17 @@
       fullButton.className = "ripfullpage-dialog-button";
       cancelButton.className = "ripfullpage-dialog-button";
 
-      title.textContent = "页面过长";
-      message.textContent =
-        "这个页面可能是无限滚动或超长页面，完整截图容易卡住或占用大量内存。";
-      meta.textContent =
-        `预计 ${details.totalTiles} 张分块，页面高度 ${details.pageHeight}px。` +
-        ` 推荐限制为 ${details.limitedTiles} 张分块，约 ${details.limitedHeight}px。`;
-      limitButton.textContent = "限制截图";
-      fullButton.textContent = "继续完整截图";
-      cancelButton.textContent = "取消";
+      title.textContent = t("pageTooLongTitle");
+      message.textContent = t("pageTooLongMessage");
+      meta.textContent = t("pageTooLongMeta", {
+        totalTiles: details.totalTiles,
+        pageHeight: details.pageHeight,
+        limitedTiles: details.limitedTiles,
+        limitedHeight: details.limitedHeight,
+      });
+      limitButton.textContent = t("limitCapture");
+      fullButton.textContent = t("continueFullCapture");
+      cancelButton.textContent = t("cancel");
 
       const cleanup = (choice) => {
         document.removeEventListener("keydown", onKeyDown, true);
@@ -852,7 +922,7 @@
       overlay.className = "ripfullpage-element-overlay";
       highlight.className = "ripfullpage-element-highlight";
       label.className = "ripfullpage-size-label";
-      label.textContent = "点击选择元素，ESC 取消";
+      label.textContent = t("selectElement");
 
       overlay.append(highlight, label);
       document.documentElement.appendChild(overlay);
@@ -938,7 +1008,7 @@
       overlay.className = "ripfullpage-element-overlay";
       highlight.className = "ripfullpage-element-highlight";
       label.className = "ripfullpage-size-label";
-      label.textContent = "点击选择内部滚动区域，ESC 取消";
+      label.textContent = t("selectScrollableElement");
 
       overlay.append(highlight, label);
       document.documentElement.appendChild(overlay);
@@ -972,7 +1042,7 @@
 
         if (!activeTarget) {
           highlight.hidden = true;
-          label.textContent = "移动到有内部滚动条的区域";
+          label.textContent = t("moveToScrollable");
           label.style.left =
             `${clamp(event.clientX + 12, 8, Math.max(8, window.innerWidth - 170))}px`;
           label.style.top =
@@ -1001,7 +1071,7 @@
         event.stopPropagation();
 
         if (!activeTarget) {
-          showToast("请点击有内部滚动条的区域。", true);
+          showToast(t("clickScrollable"), true);
           return;
         }
 
@@ -1177,10 +1247,10 @@
     const scrollsY = element.scrollHeight > element.clientHeight + 2;
 
     if (scrollsX && scrollsY) {
-      return "横纵滚动";
+      return t("scrollBoth");
     }
 
-    return scrollsX ? "横向滚动" : "纵向滚动";
+    return scrollsX ? t("scrollX") : t("scrollY");
   }
 
   function getScrollableTargetSize(target) {
@@ -1217,7 +1287,7 @@
       Math.abs(clampedRect.width - viewportRect.width) > 2 ||
       Math.abs(clampedRect.height - viewportRect.height) > 2
     ) {
-      throw new Error("请先将滚动区域完整显示在窗口内再截图。");
+      throw new Error(t("scrollAreaMustBeVisible"));
     }
 
     return viewportRect;
@@ -1759,6 +1829,24 @@
     });
   }
 
+  function normalizeLanguage(language) {
+    return Object.prototype.hasOwnProperty.call(TRANSLATIONS, language)
+      ? language
+      : DEFAULT_LANGUAGE;
+  }
+
+  function t(key, values = {}) {
+    const template =
+      TRANSLATIONS[currentLanguage][key] ||
+      TRANSLATIONS[DEFAULT_LANGUAGE][key] ||
+      key;
+
+    return Object.entries(values).reduce(
+      (text, [name, value]) => text.replaceAll(`{${name}}`, String(value)),
+      template,
+    );
+  }
+
   function wait(ms) {
     return new Promise((resolve) => {
       window.setTimeout(resolve, ms);
@@ -1777,14 +1865,14 @@
 
     for (let second = totalSeconds; second > 0; second -= 1) {
       showToast(
-        `将在 ${second} 秒后截图...`,
+        t("delayedCapture", { second }),
         false,
         (totalSeconds - second) / totalSeconds,
       );
       await wait(1000);
     }
 
-    showToast("正在截图...", false, 1);
+    showToast(t("capturingNow"), false, 1);
     await wait(120);
   }
 

@@ -44,6 +44,48 @@ p {
   font-size: 12px;
 }
 
+.language-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 12px;
+  color: #cbd5e1;
+  font-size: 12px;
+}
+
+.language-toggle {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 8px;
+  background: #111827;
+}
+
+.language-button {
+  min-width: 44px;
+  min-height: 26px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #94a3b8;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.language-button.active {
+  background: #2563eb;
+  color: #eff6ff;
+}
+
+.language-button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
 .actions {
   display: grid;
   gap: 9px;

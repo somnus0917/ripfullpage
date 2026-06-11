@@ -101,6 +101,38 @@ p {
   opacity: 0.55;
 }
 
+.language-toggle {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 8px;
+  background: #111827;
+}
+
+.language-button {
+  min-width: 44px;
+  min-height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #94a3b8;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.language-button.active {
+  background: #2563eb;
+  color: #eff6ff;
+}
+
+.language-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
 .toolbar-select-label,
 .toolbar-range-label {
   display: flex;
