@@ -53,7 +53,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.action === 'openEditor') {
-    openEditor(message.dataURL)
+    openEditor(message.dataURL, getTabSourceURL(sender.tab))
       .then(() => sendResponse({ ok: true }))
       .catch((error) => sendResponse({ ok: false, error: error.message }));
     return true;
@@ -153,7 +153,7 @@ async function waitForCaptureSlot() {
   lastVisibleCaptureAt = Date.now();
 }
 
-async function openEditor(dataURL) {
+async function openEditor(dataURL, sourceURL = '') {
   if (!dataURL || typeof dataURL !== 'string') {
     const language = await getPreferredLanguage();
 
@@ -161,7 +161,7 @@ async function openEditor(dataURL) {
   }
 
   try {
-    await saveHistoryItem(dataURL);
+    await saveHistoryItem(dataURL, sourceURL);
   } catch (error) {
     // History is convenient, but it should never block the screenshot result.
     console.warn('[ripfullpage] Could not save screenshot history:', error);
@@ -170,8 +170,10 @@ async function openEditor(dataURL) {
   await chrome.storage.session.set({
     [EDITOR_IMAGE_KEY]: {
       dataURL,
+      sourceURL,
       createdAt: Date.now()
-    }
+    },
+    'ripfullpage:lastSourceURL': sourceURL
   });
 
   await chrome.tabs.create({
@@ -199,8 +201,10 @@ async function openHistoryItem(id) {
   await chrome.storage.session.set({
     [EDITOR_IMAGE_KEY]: {
       dataURL: item.dataURL,
+      sourceURL: item.sourceURL || '',
       createdAt: item.createdAt || Date.now()
-    }
+    },
+    'ripfullpage:lastSourceURL': item.sourceURL || ''
   });
 
   await chrome.tabs.create({
@@ -208,13 +212,14 @@ async function openHistoryItem(id) {
   });
 }
 
-async function saveHistoryItem(dataURL) {
+async function saveHistoryItem(dataURL, sourceURL = '') {
   const stored = await chrome.storage.local.get(HISTORY_KEY);
   const history = Array.isArray(stored[HISTORY_KEY]) ? stored[HISTORY_KEY] : [];
   const createdAt = Date.now();
   const item = {
     id: `shot-${createdAt}-${Math.random().toString(16).slice(2)}`,
     dataURL,
+    sourceURL,
     thumbnailURL: await createThumbnailDataURL(dataURL),
     createdAt
   };
@@ -261,6 +266,10 @@ function blobToDataURL(blob) {
 
     return `data:${blob.type};base64,${btoa(binary)}`;
   });
+}
+
+function getTabSourceURL(tab) {
+  return tab && typeof tab.url === 'string' ? tab.url : '';
 }
 
 function normalizeDelaySeconds(value) {

@@ -173,6 +173,7 @@ const languageButtons = Array.from(document.querySelectorAll('[data-language-opt
 
 let originalDataURL = '';
 let currentDataURL = '';
+let sourceURL = '';
 let naturalWidth = 0;
 let naturalHeight = 0;
 let cropRect = null;
@@ -215,7 +216,8 @@ async function init() {
 
   originalDataURL = item.dataURL;
   currentDataURL = item.dataURL;
-  watermarkTextInput.value = getStoredSourceURL(stored, item);
+  sourceURL = getStoredSourceURL(stored, item);
+  watermarkTextInput.value = sourceURL;
   historyStack = [currentDataURL];
 
   bindEvents();
@@ -667,9 +669,9 @@ async function commitEditState(state) {
   context.drawImage(image, 0, 0);
 
   if (state.tool === 'mosaic') {
-    applyMosaic(context, state, scaleX, scaleY);
+    await applyMosaic(context, state, scaleX, scaleY);
   } else if (state.tool === 'blur') {
-    applyBlur(context, state, scaleX, scaleY);
+    await applyBlur(context, state, scaleX, scaleY);
   } else if (state.tool === 'sticker') {
     await drawStickerState(context, state, scaleX, scaleY);
   } else {
@@ -768,12 +770,18 @@ async function drawStickerState(context, state, scaleX, scaleY) {
   context.drawImage(sticker, x, y, width, height);
 }
 
-function applyMosaic(context, state, scaleX, scaleY) {
-  const start = scalePoint(state.start, scaleX, scaleY);
-  const end = scalePoint(state.point, scaleX, scaleY);
-  const rect = makeRect(start.x, start.y, end.x, end.y);
+async function applyMosaic(context, state, scaleX, scaleY) {
+  const rect = getScaledCanvasRect(context, state, scaleX, scaleY);
   const blockSize = getMosaicBlockSize();
 
+  if (await applyWasmMosaic(context, rect, blockSize)) {
+    return;
+  }
+
+  applyCanvasMosaic(context, rect, blockSize);
+}
+
+function applyCanvasMosaic(context, rect, blockSize) {
   for (let y = rect.top; y < rect.top + rect.height; y += blockSize) {
     for (let x = rect.left; x < rect.left + rect.width; x += blockSize) {
       const width = Math.min(blockSize, rect.left + rect.width - x);
@@ -788,10 +796,23 @@ function applyMosaic(context, state, scaleX, scaleY) {
   }
 }
 
-function applyBlur(context, state, scaleX, scaleY) {
-  const start = scalePoint(state.start, scaleX, scaleY);
-  const end = scalePoint(state.point, scaleX, scaleY);
-  const rect = clampRectToCanvas(makeRect(start.x, start.y, end.x, end.y), context.canvas);
+async function applyBlur(context, state, scaleX, scaleY) {
+  const rect = getScaledCanvasRect(context, state, scaleX, scaleY);
+  const sourceWidth = Math.round(rect.width);
+  const sourceHeight = Math.round(rect.height);
+
+  if (sourceWidth < 2 || sourceHeight < 2) {
+    return;
+  }
+
+  if (await applyWasmBlur(context, rect)) {
+    return;
+  }
+
+  applyCanvasBlur(context, rect);
+}
+
+function applyCanvasBlur(context, rect) {
   const sourceWidth = Math.round(rect.width);
   const sourceHeight = Math.round(rect.height);
   const blurOptions = getBlurOptions();
@@ -840,6 +861,66 @@ function applyBlur(context, state, scaleX, scaleY) {
   context.drawImage(sourceCanvas, Math.round(rect.left), Math.round(rect.top));
 }
 
+async function applyWasmMosaic(context, rect, blockSize) {
+  if (!window.ripfullpageWasmCore) {
+    return false;
+  }
+
+  try {
+    await window.ripfullpageWasmCore.applyMosaic(context, toPixelRect(rect), blockSize);
+    return true;
+  } catch (error) {
+    console.warn('[ripfullpage] Falling back to Canvas mosaic:', error);
+    return false;
+  }
+}
+
+async function applyWasmBlur(context, rect) {
+  if (!window.ripfullpageWasmCore) {
+    return false;
+  }
+
+  try {
+    await window.ripfullpageWasmCore.applyBlur(context, toPixelRect(rect), getWasmBlurOptions());
+    return true;
+  } catch (error) {
+    console.warn('[ripfullpage] Falling back to Canvas blur:', error);
+    return false;
+  }
+}
+
+async function applyWasmCrop(sourceContext, targetContext, rect) {
+  if (!window.ripfullpageWasmCore) {
+    return false;
+  }
+
+  try {
+    const imageData = await window.ripfullpageWasmCore.crop(sourceContext, toPixelRect(rect));
+
+    targetContext.putImageData(imageData, 0, 0);
+    return true;
+  } catch (error) {
+    console.warn('[ripfullpage] Falling back to Canvas crop:', error);
+    return false;
+  }
+}
+
+function getScaledCanvasRect(context, state, scaleX, scaleY) {
+  const start = scalePoint(state.start, scaleX, scaleY);
+  const end = scalePoint(state.point, scaleX, scaleY);
+
+  return clampRectToCanvas(makeRect(start.x, start.y, end.x, end.y), context.canvas);
+}
+
+function toPixelRect(rect) {
+  return {
+    left: Math.max(0, Math.round(rect.left)),
+    top: Math.max(0, Math.round(rect.top)),
+    width: Math.max(1, Math.round(rect.width)),
+    height: Math.max(1, Math.round(rect.height))
+  };
+}
+
 function getPrivacyStrength() {
   return clamp(Number(privacyStrengthInput.value) || 5, 1, 10);
 }
@@ -854,6 +935,15 @@ function getBlurOptions() {
   return {
     downscale: Math.round(4 + strength),
     iterations: strength >= 8 ? 4 : strength >= 4 ? 3 : 2
+  };
+}
+
+function getWasmBlurOptions() {
+  const strength = getPrivacyStrength();
+
+  return {
+    radius: Math.round(2 + strength * 1.8),
+    iterations: strength >= 8 ? 3 : strength >= 4 ? 2 : 1
   };
 }
 
@@ -947,25 +1037,40 @@ async function applyCrop() {
   const sourceY = Math.round(cropRect.top * scaleY);
   const sourceWidth = Math.round(cropRect.width * scaleX);
   const sourceHeight = Math.round(cropRect.height * scaleY);
-  const canvas = document.createElement('canvas');
-  const context = canvas.getContext('2d');
+  const sourceCanvas = document.createElement('canvas');
+  const sourceContext = sourceCanvas.getContext('2d');
+  const targetCanvas = document.createElement('canvas');
+  const targetContext = targetCanvas.getContext('2d');
 
-  canvas.width = Math.max(1, sourceWidth);
-  canvas.height = Math.max(1, sourceHeight);
+  sourceCanvas.width = image.naturalWidth;
+  sourceCanvas.height = image.naturalHeight;
+  sourceContext.drawImage(image, 0, 0);
 
-  context.drawImage(
-    image,
-    sourceX,
-    sourceY,
-    sourceWidth,
-    sourceHeight,
-    0,
-    0,
-    canvas.width,
-    canvas.height
-  );
+  targetCanvas.width = Math.max(1, sourceWidth);
+  targetCanvas.height = Math.max(1, sourceHeight);
 
-  currentDataURL = canvas.toDataURL('image/png');
+  if (await applyWasmCrop(sourceContext, targetContext, {
+    left: sourceX,
+    top: sourceY,
+    width: targetCanvas.width,
+    height: targetCanvas.height
+  })) {
+    currentDataURL = targetCanvas.toDataURL('image/png');
+  } else {
+    targetContext.drawImage(
+      image,
+      sourceX,
+      sourceY,
+      sourceWidth,
+      sourceHeight,
+      0,
+      0,
+      targetCanvas.width,
+      targetCanvas.height
+    );
+    currentDataURL = targetCanvas.toDataURL('image/png');
+  }
+
   pushHistory(currentDataURL);
   await persistCurrentImage();
   await loadPreview(currentDataURL);
@@ -1206,12 +1311,12 @@ function getWatermarkBackdropColor(color, opacity) {
 
 async function downloadImage() {
   const anchor = document.createElement('a');
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const blob = await createOutputBlob(formatSelect.value);
+  const type = formatSelect.value;
+  const blob = await createOutputBlob(type);
   const url = URL.createObjectURL(blob);
 
   anchor.href = url;
-  anchor.download = `ripfullpage-${timestamp}.${getFileExtension(formatSelect.value)}`;
+  anchor.download = createScreenshotFilename(type);
   anchor.click();
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
@@ -1227,13 +1332,12 @@ async function copyImageToClipboard() {
   try {
     copyButton.disabled = true;
     copyButton.textContent = t('copying');
-    const blob = await createOutputBlob('image/png');
+    const type = 'image/png';
+    const blob = await createOutputBlob(type);
+    const filename = createScreenshotFilename(type);
+    const file = new File([blob], filename, { type: blob.type });
 
-    await navigator.clipboard.write([
-      new ClipboardItem({
-        [blob.type]: blob
-      })
-    ]);
+    await writeNamedImageToClipboard(file, filename);
     copyButton.textContent = t('copied');
     window.setTimeout(() => {
       copyButton.textContent = originalText;
@@ -1255,7 +1359,7 @@ async function shareImage() {
     const blob = await createOutputBlob(type);
     const file = new File(
       [blob],
-      `ripfullpage-${new Date().toISOString().replace(/[:.]/g, '-')}.${getFileExtension(type)}`,
+      createScreenshotFilename(type),
       { type: blob.type }
     );
 
@@ -1322,6 +1426,10 @@ function normalizeImageType(type) {
 }
 
 function getFileExtension(type) {
+  if (type === 'application/pdf') {
+    return 'pdf';
+  }
+
   const normalizedType = normalizeImageType(type);
 
   if (normalizedType === 'image/jpeg') {
@@ -1333,6 +1441,90 @@ function getFileExtension(type) {
   }
 
   return 'png';
+}
+
+function createScreenshotFilename(type) {
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const sourceSlug = createSourceSlug(sourceURL);
+  const prefix = sourceSlug ? `ripfullpage-${sourceSlug}` : 'ripfullpage';
+
+  return `${prefix}-${timestamp}.${getFileExtension(type)}`;
+}
+
+function createSourceSlug(url) {
+  if (!url) {
+    return '';
+  }
+
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.replace(/^www\./i, '');
+    const path = parsed.pathname
+      .split('/')
+      .filter(Boolean)
+      .slice(0, 3)
+      .join('-');
+
+    return sanitizeFilenamePart([host, path].filter(Boolean).join('-'));
+  } catch (_error) {
+    return sanitizeFilenamePart(url);
+  }
+}
+
+function sanitizeFilenamePart(value) {
+  return String(value)
+    .toLowerCase()
+    .replace(/^https?:\/\//, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80);
+}
+
+async function writeNamedImageToClipboard(file, filename) {
+  const dataURL = await blobToDataURL(file);
+  const escapedFilename = escapeHtml(filename);
+  const html = `<img src="${dataURL}" alt="${escapedFilename}" download="${escapedFilename}">`;
+
+  try {
+    await navigator.clipboard.write([
+      new ClipboardItem({
+        [file.type]: file,
+        'text/html': new Blob([html], { type: 'text/html' }),
+        'text/plain': new Blob([filename], { type: 'text/plain' })
+      })
+    ]);
+  } catch (error) {
+    console.warn('[ripfullpage] Named clipboard write failed, falling back to image only:', error);
+    await navigator.clipboard.write([
+      new ClipboardItem({
+        [file.type]: file
+      })
+    ]);
+  }
+}
+
+function blobToDataURL(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('Could not read image blob.'));
+    reader.readAsDataURL(blob);
+  });
+}
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, (char) => {
+    const entities = {
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;'
+    };
+
+    return entities[char];
+  });
 }
 
 async function downloadPdf() {
@@ -1348,10 +1540,9 @@ async function downloadPdf() {
     const blob = new Blob([pdfBytes], { type: 'application/pdf' });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
 
     anchor.href = url;
-    anchor.download = `ripfullpage-${timestamp}.pdf`;
+    anchor.download = createScreenshotFilename('application/pdf');
     anchor.click();
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   } catch (error) {
@@ -1666,8 +1857,10 @@ async function persistCurrentImage() {
   await chrome.storage.session.set({
     [EDITOR_IMAGE_KEY]: {
       dataURL: currentDataURL,
+      sourceURL,
       createdAt: Date.now()
-    }
+    },
+    'ripfullpage:lastSourceURL': sourceURL
   });
 }
 

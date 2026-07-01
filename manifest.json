@@ -4,6 +4,9 @@
   "version": "1.0.0",
   "default_locale": "zh_CN",
   "description": "__MSG_extensionDescription__",
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';"
+  },
   "permissions": [
     "activeTab",
     "clipboardWrite",
