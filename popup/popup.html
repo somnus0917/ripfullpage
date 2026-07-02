@@ -1,30 +1,55 @@
 <!doctype html>
 <html lang="zh-CN">
   <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>ripfullpage</title>
-    <link rel="stylesheet" href="popup.css">
+    <link rel="stylesheet" href="popup.css" />
   </head>
   <body>
     <main class="popup-shell">
       <header class="popup-header">
-        <img src="../icons/icon48.png" alt="" class="popup-logo">
+        <img src="../icons/icon48.png" alt="" class="popup-logo" />
         <div>
           <h1>ripfullpage</h1>
           <p data-i18n="subtitle">Screenshot tool</p>
         </div>
       </header>
 
-      <section class="language-panel" aria-label="语言" data-i18n-aria-label="languageLabel">
+      <section
+        class="language-panel"
+        aria-label="语言"
+        data-i18n-aria-label="languageLabel"
+      >
         <span data-i18n="languageLabel">语言</span>
-        <div class="language-toggle" role="group" aria-label="语言" data-i18n-aria-label="languageLabel">
-          <button class="language-button" data-language-option="zh_CN" type="button">中文</button>
-          <button class="language-button" data-language-option="en" type="button">EN</button>
+        <div
+          class="language-toggle"
+          role="group"
+          aria-label="语言"
+          data-i18n-aria-label="languageLabel"
+        >
+          <button
+            class="language-button"
+            data-language-option="zh_CN"
+            type="button"
+          >
+            中文
+          </button>
+          <button
+            class="language-button"
+            data-language-option="en"
+            type="button"
+          >
+            EN
+          </button>
         </div>
       </section>
 
-      <section class="actions" aria-label="截图操作" data-i18n-aria-label="captureActions">
+      <section
+        class="actions"
+        aria-label="截图操作"
+        data-i18n-aria-label="captureActions"
+      >
         <button id="fullPageButton" class="action-button" type="button">
           <span class="button-icon" aria-hidden="true">⌁</span>
           <span data-i18n="fullPage">全页截图</span>
@@ -43,7 +68,11 @@
         </button>
       </section>
 
-      <section class="delay-panel" aria-label="延迟截图" data-i18n-aria-label="delayCapture">
+      <section
+        class="delay-panel"
+        aria-label="延迟截图"
+        data-i18n-aria-label="delayCapture"
+      >
         <label for="delaySelect" data-i18n="delay">延迟</label>
         <select id="delaySelect">
           <option value="0" data-i18n="delayNow">立即截图</option>
@@ -53,22 +82,37 @@
         </select>
       </section>
 
-      <section class="shortcut-panel" aria-label="快捷键" data-i18n-aria-label="shortcuts">
+      <section
+        class="shortcut-panel"
+        aria-label="快捷键"
+        data-i18n-aria-label="shortcuts"
+      >
         <span data-i18n="shortcutFull">Alt+Shift+F 全页</span>
         <span data-i18n="shortcutArea">Alt+Shift+S 区域</span>
       </section>
 
       <button id="feedbackButton" class="feedback-button" type="button">
         <span data-i18n="feedback">反馈</span>
-        <span class="feedback-email">somnus0917chen@hotmail.com</span>
+        <span class="feedback-email">contact@somnus.wiki</span>
       </button>
 
-      <section class="history-panel" aria-label="截图历史" data-i18n-aria-label="history">
+      <section
+        class="history-panel"
+        aria-label="截图历史"
+        data-i18n-aria-label="history"
+      >
         <div class="section-title">
           <span data-i18n="recentScreenshots">最近截图</span>
           <div class="history-title-actions">
             <span id="historyCount"></span>
-            <button id="clearHistoryButton" class="text-button" type="button" data-i18n="clear">清空</button>
+            <button
+              id="clearHistoryButton"
+              class="text-button"
+              type="button"
+              data-i18n="clear"
+            >
+              清空
+            </button>
           </div>
         </div>
         <div id="historyList" class="history-list">
