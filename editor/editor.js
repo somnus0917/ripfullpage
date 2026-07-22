@@ -1,3 +1,4 @@
+(() => {
 // Screenshot editor entry point. It coordinates UI state and feature modules.
 
 const {
@@ -1148,3 +1149,4 @@ function setButtonsEnabled(enabled) {
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
+})();

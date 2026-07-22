@@ -1,3 +1,4 @@
+(() => {
 const WASM_CORE_URL = 'wasm/ripfullpage_core.wasm';
 const OK = 0;
 
@@ -147,3 +148,4 @@ function assertStatus(status, operation) {
     throw new Error(`${operation} failed with status ${status}`);
   }
 }
+})();
