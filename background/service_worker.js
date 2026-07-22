@@ -1,9 +1,14 @@
 // Background service worker for ripfullpage.
 // It injects the content script on demand, captures visible tabs, and opens the editor.
 
-const EDITOR_IMAGE_KEY = 'ripfullpage:lastImage';
-const HISTORY_KEY = 'ripfullpage:history';
-const LANGUAGE_KEY = 'ripfullpage:language';
+importScripts('../shared/constants.js');
+
+const {
+  EDITOR_IMAGE_KEY,
+  HISTORY_KEY,
+  LANGUAGE_KEY,
+  LAST_SOURCE_URL_KEY
+} = globalThis.ripfullpageConstants;
 const MAX_HISTORY_ITEMS = 12;
 const MIN_CAPTURE_INTERVAL_MS = 650;
 const DEFAULT_LANGUAGE = 'zh_CN';
@@ -122,7 +127,13 @@ async function ensureContentScript(tabId) {
 
   await chrome.scripting.executeScript({
     target: { tabId },
-    files: ['content/content_runtime.js', 'content/content_script.js']
+    files: [
+      'content/content_runtime.js',
+      'content/content_selection.js',
+      'content/content_page_cleanup.js',
+      'content/content_capture.js',
+      'content/content_script.js'
+    ]
   });
 }
 
@@ -173,7 +184,7 @@ async function openEditor(dataURL, sourceURL = '') {
       sourceURL,
       createdAt: Date.now()
     },
-    'ripfullpage:lastSourceURL': sourceURL
+    [LAST_SOURCE_URL_KEY]: sourceURL
   });
 
   await chrome.tabs.create({
@@ -204,7 +215,7 @@ async function openHistoryItem(id) {
       sourceURL: item.sourceURL || '',
       createdAt: item.createdAt || Date.now()
     },
-    'ripfullpage:lastSourceURL': item.sourceURL || ''
+    [LAST_SOURCE_URL_KEY]: item.sourceURL || ''
   });
 
   await chrome.tabs.create({

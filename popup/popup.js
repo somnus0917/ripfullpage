@@ -13,8 +13,7 @@ const statusText = document.getElementById("status");
 const languageButtons = Array.from(
   document.querySelectorAll("[data-language-option]"),
 );
-const HISTORY_KEY = "ripfullpage:history";
-const LANGUAGE_KEY = "ripfullpage:language";
+const { HISTORY_KEY, LANGUAGE_KEY } = window.ripfullpageConstants;
 const FEEDBACK_EMAIL = "contact@somnus.wiki";
 const DEFAULT_LANGUAGE = "zh_CN";
 const TRANSLATIONS = {

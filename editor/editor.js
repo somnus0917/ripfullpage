@@ -1,7 +1,10 @@
-// Screenshot editor. It supports crop, annotation, mosaic, undo/redo, reset, copy, share, and export.
+// Screenshot editor entry point. It coordinates UI state and feature modules.
 
-const EDITOR_IMAGE_KEY = 'ripfullpage:lastImage';
-const LANGUAGE_KEY = 'ripfullpage:language';
+const {
+  EDITOR_IMAGE_KEY,
+  LANGUAGE_KEY,
+  LAST_SOURCE_URL_KEY,
+} = window.ripfullpageConstants;
 const MIN_CROP_SIZE = 20;
 const MAX_HISTORY = 30;
 const WATERMARK_PADDING = 16;
@@ -133,6 +136,38 @@ const TRANSLATIONS = {
   }
 };
 
+const editorGeometry = window.ripfullpageEditorGeometry;
+const editorDrawing = window.ripfullpageEditorDrawing;
+const editorWatermark = window.ripfullpageEditorWatermark;
+const editorExport = window.ripfullpageEditorExport;
+
+if (!editorGeometry || !editorDrawing || !editorWatermark || !editorExport) {
+  throw new Error("ripfullpage editor modules are not loaded.");
+}
+
+const {
+  getLocalPoint,
+  makeRect,
+  pointInRect,
+  resizeCropRect,
+  scalePoint,
+} = editorGeometry;
+const {
+  applyBlur,
+  applyMosaic,
+  applyWasmCrop,
+  drawEditState,
+  drawPrivacyRectPreview,
+  drawStickerState,
+} = editorDrawing;
+const { drawWatermark } = editorWatermark;
+const {
+  createOutputBlob,
+  createPdfBlob,
+  createScreenshotFilename,
+  writeImageToClipboard,
+} = editorExport;
+
 const previewImage = document.getElementById('previewImage');
 const editCanvas = document.getElementById('editCanvas');
 const editContext = editCanvas.getContext('2d');
@@ -205,7 +240,7 @@ async function init() {
     EDITOR_IMAGE_KEY,
     'ripfullpage:sourceURL',
     'ripfullpage:sourceUrl',
-    'ripfullpage:lastSourceURL'
+    LAST_SOURCE_URL_KEY
   ]);
   const item = stored[EDITOR_IMAGE_KEY];
 
@@ -291,7 +326,7 @@ function getStoredSourceURL(stored, item) {
     item.url ||
     stored['ripfullpage:sourceURL'] ||
     stored['ripfullpage:sourceUrl'] ||
-    stored['ripfullpage:lastSourceURL'] ||
+    stored[LAST_SOURCE_URL_KEY] ||
     ''
   );
 }
@@ -687,345 +722,6 @@ async function commitEditState(state) {
   setActiveTool(activeTool);
 }
 
-function drawEditState(context, state, scaleX, scaleY = scaleX) {
-  const color = colorInput.value;
-  const size = Number(sizeInput.value);
-  const start = scalePoint(state.start, scaleX, scaleY);
-  const end = scalePoint(state.point, scaleX, scaleY);
-
-  context.save();
-  context.lineCap = 'round';
-  context.lineJoin = 'round';
-
-  if (state.tool === 'pen' || state.tool === 'marker') {
-    context.globalAlpha = state.tool === 'marker' ? 0.34 : 1;
-    context.globalCompositeOperation = state.tool === 'marker' ? 'multiply' : 'source-over';
-    context.strokeStyle = color;
-    context.lineWidth = size * scaleX;
-    context.beginPath();
-
-    state.points.forEach((point, index) => {
-      const scaled = scalePoint(point, scaleX, scaleY);
-
-      if (index === 0) {
-        context.moveTo(scaled.x, scaled.y);
-      } else {
-        context.lineTo(scaled.x, scaled.y);
-      }
-    });
-
-    context.stroke();
-  }
-
-  if (state.tool === 'rect') {
-    const rect = makeRect(start.x, start.y, end.x, end.y);
-
-    context.strokeStyle = color;
-    context.lineWidth = size * scaleX;
-    context.strokeRect(rect.left, rect.top, rect.width, rect.height);
-  }
-
-  if (state.tool === 'ellipse') {
-    const rect = makeRect(start.x, start.y, end.x, end.y);
-
-    context.strokeStyle = color;
-    context.lineWidth = size * scaleX;
-    context.beginPath();
-    context.ellipse(
-      rect.left + rect.width / 2,
-      rect.top + rect.height / 2,
-      Math.max(1, rect.width / 2),
-      Math.max(1, rect.height / 2),
-      0,
-      0,
-      Math.PI * 2
-    );
-    context.stroke();
-  }
-
-  if (state.tool === 'arrow') {
-    context.strokeStyle = color;
-    context.fillStyle = color;
-    context.lineWidth = size * scaleX;
-    drawArrow(context, start, end, Math.max(12, size * 4 * scaleX));
-  }
-
-  if (state.tool === 'text') {
-    const fontSize = Number(fontSizeInput.value);
-
-    context.fillStyle = color;
-    context.font = `600 ${fontSize * scaleX}px ui-sans-serif, system-ui, sans-serif`;
-    context.textBaseline = 'top';
-    context.fillText(state.text, start.x, start.y);
-  }
-
-  context.restore();
-}
-
-async function drawStickerState(context, state, scaleX, scaleY) {
-  const sticker = await loadImage(state.stickerDataURL);
-  const x = state.start.x * scaleX;
-  const y = state.start.y * scaleY;
-  const width = state.stickerRenderedWidth * scaleX;
-  const height = state.stickerRenderedHeight * scaleY;
-
-  context.drawImage(sticker, x, y, width, height);
-}
-
-async function applyMosaic(context, state, scaleX, scaleY) {
-  const rect = getScaledCanvasRect(context, state, scaleX, scaleY);
-  const blockSize = getMosaicBlockSize();
-
-  if (await applyWasmMosaic(context, rect, blockSize)) {
-    return;
-  }
-
-  applyCanvasMosaic(context, rect, blockSize);
-}
-
-function applyCanvasMosaic(context, rect, blockSize) {
-  for (let y = rect.top; y < rect.top + rect.height; y += blockSize) {
-    for (let x = rect.left; x < rect.left + rect.width; x += blockSize) {
-      const width = Math.min(blockSize, rect.left + rect.width - x);
-      const height = Math.min(blockSize, rect.top + rect.height - y);
-      const sampleX = Math.max(0, Math.floor(x));
-      const sampleY = Math.max(0, Math.floor(y));
-      const sample = context.getImageData(sampleX, sampleY, 1, 1).data;
-
-      context.fillStyle = `rgb(${sample[0]}, ${sample[1]}, ${sample[2]})`;
-      context.fillRect(Math.floor(x), Math.floor(y), Math.ceil(width), Math.ceil(height));
-    }
-  }
-}
-
-async function applyBlur(context, state, scaleX, scaleY) {
-  const rect = getScaledCanvasRect(context, state, scaleX, scaleY);
-  const sourceWidth = Math.round(rect.width);
-  const sourceHeight = Math.round(rect.height);
-
-  if (sourceWidth < 2 || sourceHeight < 2) {
-    return;
-  }
-
-  if (await applyWasmBlur(context, rect)) {
-    return;
-  }
-
-  applyCanvasBlur(context, rect);
-}
-
-function applyCanvasBlur(context, rect) {
-  const sourceWidth = Math.round(rect.width);
-  const sourceHeight = Math.round(rect.height);
-  const blurOptions = getBlurOptions();
-
-  if (sourceWidth < 2 || sourceHeight < 2) {
-    return;
-  }
-
-  const sourceCanvas = document.createElement('canvas');
-  const sourceContext = sourceCanvas.getContext('2d');
-  const smallCanvas = document.createElement('canvas');
-  const smallContext = smallCanvas.getContext('2d');
-  const smallWidth = Math.max(1, Math.round(sourceWidth / blurOptions.downscale));
-  const smallHeight = Math.max(1, Math.round(sourceHeight / blurOptions.downscale));
-
-  sourceCanvas.width = sourceWidth;
-  sourceCanvas.height = sourceHeight;
-  smallCanvas.width = smallWidth;
-  smallCanvas.height = smallHeight;
-
-  sourceContext.drawImage(
-    context.canvas,
-    Math.round(rect.left),
-    Math.round(rect.top),
-    sourceWidth,
-    sourceHeight,
-    0,
-    0,
-    sourceWidth,
-    sourceHeight
-  );
-
-  // 根据强度反复缩小再放大选区，模拟可调的高斯模糊。
-  for (let index = 0; index < blurOptions.iterations; index += 1) {
-    smallContext.clearRect(0, 0, smallWidth, smallHeight);
-    smallContext.imageSmoothingEnabled = true;
-    smallContext.imageSmoothingQuality = 'high';
-    smallContext.drawImage(sourceCanvas, 0, 0, smallWidth, smallHeight);
-
-    sourceContext.clearRect(0, 0, sourceWidth, sourceHeight);
-    sourceContext.imageSmoothingEnabled = true;
-    sourceContext.imageSmoothingQuality = 'high';
-    sourceContext.drawImage(smallCanvas, 0, 0, sourceWidth, sourceHeight);
-  }
-
-  context.drawImage(sourceCanvas, Math.round(rect.left), Math.round(rect.top));
-}
-
-async function applyWasmMosaic(context, rect, blockSize) {
-  if (!window.ripfullpageWasmCore) {
-    return false;
-  }
-
-  try {
-    await window.ripfullpageWasmCore.applyMosaic(context, toPixelRect(rect), blockSize);
-    return true;
-  } catch (error) {
-    console.warn('[ripfullpage] Falling back to Canvas mosaic:', error);
-    return false;
-  }
-}
-
-async function applyWasmBlur(context, rect) {
-  if (!window.ripfullpageWasmCore) {
-    return false;
-  }
-
-  try {
-    await window.ripfullpageWasmCore.applyBlur(context, toPixelRect(rect), getWasmBlurOptions());
-    return true;
-  } catch (error) {
-    console.warn('[ripfullpage] Falling back to Canvas blur:', error);
-    return false;
-  }
-}
-
-async function applyWasmCrop(sourceContext, targetContext, rect) {
-  if (!window.ripfullpageWasmCore) {
-    return false;
-  }
-
-  try {
-    const imageData = await window.ripfullpageWasmCore.crop(sourceContext, toPixelRect(rect));
-
-    targetContext.putImageData(imageData, 0, 0);
-    return true;
-  } catch (error) {
-    console.warn('[ripfullpage] Falling back to Canvas crop:', error);
-    return false;
-  }
-}
-
-function getScaledCanvasRect(context, state, scaleX, scaleY) {
-  const start = scalePoint(state.start, scaleX, scaleY);
-  const end = scalePoint(state.point, scaleX, scaleY);
-
-  return clampRectToCanvas(makeRect(start.x, start.y, end.x, end.y), context.canvas);
-}
-
-function toPixelRect(rect) {
-  return {
-    left: Math.max(0, Math.round(rect.left)),
-    top: Math.max(0, Math.round(rect.top)),
-    width: Math.max(1, Math.round(rect.width)),
-    height: Math.max(1, Math.round(rect.height))
-  };
-}
-
-function getPrivacyStrength() {
-  return clamp(Number(privacyStrengthInput.value) || 5, 1, 10);
-}
-
-function getMosaicBlockSize() {
-  return Math.max(6, Math.round(getPrivacyStrength() * 4));
-}
-
-function getBlurOptions() {
-  const strength = getPrivacyStrength();
-
-  return {
-    downscale: Math.round(4 + strength),
-    iterations: strength >= 8 ? 4 : strength >= 4 ? 3 : 2
-  };
-}
-
-function getWasmBlurOptions() {
-  const strength = getPrivacyStrength();
-
-  return {
-    radius: Math.round(2 + strength * 1.8),
-    iterations: strength >= 8 ? 3 : strength >= 4 ? 2 : 1
-  };
-}
-
-function drawPrivacyRectPreview(context, state) {
-  const rect = makeRect(state.start.x, state.start.y, state.point.x, state.point.y);
-
-  context.save();
-  context.fillStyle = 'rgba(96, 165, 250, 0.14)';
-  context.strokeStyle = '#60a5fa';
-  context.lineWidth = 2;
-  context.setLineDash([8, 6]);
-  context.fillRect(rect.left, rect.top, rect.width, rect.height);
-  context.strokeRect(rect.left, rect.top, rect.width, rect.height);
-  context.setLineDash([]);
-  context.restore();
-}
-
-function drawArrow(context, start, end, headSize) {
-  const angle = Math.atan2(end.y - start.y, end.x - start.x);
-
-  context.beginPath();
-  context.moveTo(start.x, start.y);
-  context.lineTo(end.x, end.y);
-  context.stroke();
-
-  context.beginPath();
-  context.moveTo(end.x, end.y);
-  context.lineTo(
-    end.x - headSize * Math.cos(angle - Math.PI / 6),
-    end.y - headSize * Math.sin(angle - Math.PI / 6)
-  );
-  context.lineTo(
-    end.x - headSize * Math.cos(angle + Math.PI / 6),
-    end.y - headSize * Math.sin(angle + Math.PI / 6)
-  );
-  context.closePath();
-  context.fill();
-}
-
-function resizeCropRect(startRect, handle, dx, dy, bounds) {
-  let left = startRect.left;
-  let top = startRect.top;
-  let right = startRect.left + startRect.width;
-  let bottom = startRect.top + startRect.height;
-
-  if (handle === 'move') {
-    left = clamp(startRect.left + dx, 0, bounds.width - startRect.width);
-    top = clamp(startRect.top + dy, 0, bounds.height - startRect.height);
-    return {
-      left,
-      top,
-      width: startRect.width,
-      height: startRect.height
-    };
-  }
-
-  if (handle.includes('w')) {
-    left = clamp(startRect.left + dx, 0, right - MIN_CROP_SIZE);
-  }
-
-  if (handle.includes('e')) {
-    right = clamp(right + dx, left + MIN_CROP_SIZE, bounds.width);
-  }
-
-  if (handle.includes('n')) {
-    top = clamp(startRect.top + dy, 0, bottom - MIN_CROP_SIZE);
-  }
-
-  if (handle.includes('s')) {
-    bottom = clamp(bottom + dy, top + MIN_CROP_SIZE, bounds.height);
-  }
-
-  return {
-    left,
-    top,
-    width: right - left,
-    height: bottom - top
-  };
-}
-
 async function applyCrop() {
   if (!cropRect || activeTool !== 'crop') {
     return;
@@ -1217,132 +913,14 @@ function clearEditableWatermarkState() {
   appliedWatermarkState = null;
 }
 
-function drawWatermark(context, options) {
-  const padding = WATERMARK_PADDING;
-  const fontSize = clamp(options.fontSize || 16, 12, 36);
-  const opacity = clamp(options.opacity || 0.4, 0.1, 1);
-  const canvas = context.canvas;
-  const labelPaddingX = Math.max(10, Math.round(fontSize * 0.55));
-  const labelPaddingY = Math.max(6, Math.round(fontSize * 0.32));
-  const maxTextWidth = Math.max(1, canvas.width - padding * 2 - labelPaddingX * 2);
-
-  context.save();
-  context.font = `600 ${fontSize}px ui-sans-serif, system-ui, sans-serif`;
-  context.textBaseline = 'top';
-
-  const metrics = context.measureText(options.text);
-  const textWidth = Math.min(metrics.width, maxTextWidth);
-  const textHeight = fontSize * 1.25;
-  const labelWidth = textWidth + labelPaddingX * 2;
-  const labelHeight = textHeight + labelPaddingY * 2;
-  const position = getWatermarkPoint(
-    options.position,
-    canvas.width,
-    canvas.height,
-    labelWidth,
-    labelHeight,
-    padding
-  );
-  const textX = position.x + labelPaddingX;
-  const textY = position.y + labelPaddingY;
-
-  // 半透明底托 + 文字描边 + 阴影，让水印在浅色和深色截图上都更清楚。
-  drawRoundedRect(context, position.x, position.y, labelWidth, labelHeight, Math.max(8, fontSize * 0.35));
-  context.fillStyle = getWatermarkBackdropColor(options.color, opacity);
-  context.fill();
-
-  context.shadowBlur = 4;
-  context.shadowColor = getWatermarkShadowColor(options.color);
-  context.lineWidth = Math.max(2, fontSize / 9);
-  context.strokeStyle = getWatermarkStrokeColor(options.color, opacity);
-  context.strokeText(options.text, textX, textY, maxTextWidth);
-  context.fillStyle = hexToRgba(options.color, opacity);
-  context.fillText(options.text, textX, textY, maxTextWidth);
-  context.restore();
-}
-
-function drawRoundedRect(context, x, y, width, height, radius) {
-  const safeRadius = Math.min(radius, width / 2, height / 2);
-
-  context.beginPath();
-  context.moveTo(x + safeRadius, y);
-  context.lineTo(x + width - safeRadius, y);
-  context.quadraticCurveTo(x + width, y, x + width, y + safeRadius);
-  context.lineTo(x + width, y + height - safeRadius);
-  context.quadraticCurveTo(x + width, y + height, x + width - safeRadius, y + height);
-  context.lineTo(x + safeRadius, y + height);
-  context.quadraticCurveTo(x, y + height, x, y + height - safeRadius);
-  context.lineTo(x, y + safeRadius);
-  context.quadraticCurveTo(x, y, x + safeRadius, y);
-  context.closePath();
-}
-
-function getWatermarkPoint(position, canvasWidth, canvasHeight, textWidth, textHeight, padding) {
-  const points = {
-    'top-left': {
-      x: padding,
-      y: padding
-    },
-    'top-right': {
-      x: canvasWidth - textWidth - padding,
-      y: padding
-    },
-    'bottom-left': {
-      x: padding,
-      y: canvasHeight - textHeight - padding
-    },
-    'bottom-right': {
-      x: canvasWidth - textWidth - padding,
-      y: canvasHeight - textHeight - padding
-    },
-    center: {
-      x: (canvasWidth - textWidth) / 2,
-      y: (canvasHeight - textHeight) / 2
-    }
-  };
-  const point = points[position] || points['bottom-right'];
-
-  return {
-    x: clamp(point.x, padding, Math.max(padding, canvasWidth - textWidth - padding)),
-    y: clamp(point.y, padding, Math.max(padding, canvasHeight - textHeight - padding))
-  };
-}
-
-function hexToRgba(hex, alpha) {
-  const value = hex.replace('#', '');
-  const red = parseInt(value.slice(0, 2), 16);
-  const green = parseInt(value.slice(2, 4), 16);
-  const blue = parseInt(value.slice(4, 6), 16);
-
-  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
-}
-
-function getWatermarkShadowColor(color) {
-  return color.toLowerCase() === '#000000'
-    ? 'rgba(255, 255, 255, 0.55)'
-    : 'rgba(0, 0, 0, 0.62)';
-}
-
-function getWatermarkStrokeColor(color, opacity) {
-  return color.toLowerCase() === '#000000'
-    ? `rgba(255, 255, 255, ${Math.min(0.75, opacity + 0.1)})`
-    : `rgba(0, 0, 0, ${Math.min(0.82, opacity + 0.1)})`;
-}
-
-function getWatermarkBackdropColor(color, opacity) {
-  return color.toLowerCase() === '#000000'
-    ? `rgba(255, 255, 255, ${Math.min(0.38, opacity * 0.36)})`
-    : `rgba(2, 6, 23, ${Math.min(0.46, opacity * 0.42)})`;
-}
-
 async function downloadImage() {
   const anchor = document.createElement('a');
   const type = formatSelect.value;
-  const blob = await createOutputBlob(type);
+  const blob = await createOutputBlob(currentDataURL, type, Number(qualityInput.value));
   const url = URL.createObjectURL(blob);
 
   anchor.href = url;
-  anchor.download = createScreenshotFilename(type);
+  anchor.download = createScreenshotFilename(type, sourceURL);
   anchor.click();
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
@@ -1359,7 +937,7 @@ async function copyImageToClipboard() {
     copyButton.disabled = true;
     copyButton.textContent = t('copying');
     const type = 'image/png';
-    const blob = await createOutputBlob(type);
+    const blob = await createOutputBlob(currentDataURL, type, Number(qualityInput.value));
     await writeImageToClipboard(blob);
     copyButton.textContent = t('copied');
     window.setTimeout(() => {
@@ -1379,10 +957,10 @@ async function shareImage() {
 
   try {
     const type = formatSelect.value;
-    const blob = await createOutputBlob(type);
+    const blob = await createOutputBlob(currentDataURL, type, Number(qualityInput.value));
     const file = new File(
       [blob],
-      createScreenshotFilename(type),
+      createScreenshotFilename(type, sourceURL),
       { type: blob.type }
     );
 
@@ -1408,315 +986,28 @@ async function shareImage() {
   }
 }
 
-async function createOutputBlob(type) {
-  const image = await loadImage(currentDataURL);
-  const canvas = document.createElement('canvas');
-  const context = canvas.getContext('2d');
-  const normalizedType = normalizeImageType(type);
-  const quality = Number(qualityInput.value) / 100;
-
-  canvas.width = image.naturalWidth;
-  canvas.height = image.naturalHeight;
-
-  if (normalizedType === 'image/jpeg') {
-    context.fillStyle = '#ffffff';
-    context.fillRect(0, 0, canvas.width, canvas.height);
-  }
-
-  context.drawImage(image, 0, 0);
-
-  return new Promise((resolve, reject) => {
-    canvas.toBlob(
-      (blob) => {
-        if (blob) {
-          resolve(blob);
-        } else {
-          reject(new Error('Could not export image.'));
-        }
-      },
-      normalizedType,
-      normalizedType === 'image/png' ? undefined : quality
-    );
-  });
-}
-
-function normalizeImageType(type) {
-  if (type === 'image/jpeg' || type === 'image/webp') {
-    return type;
-  }
-
-  return 'image/png';
-}
-
-function getFileExtension(type) {
-  if (type === 'application/pdf') {
-    return 'pdf';
-  }
-
-  const normalizedType = normalizeImageType(type);
-
-  if (normalizedType === 'image/jpeg') {
-    return 'jpg';
-  }
-
-  if (normalizedType === 'image/webp') {
-    return 'webp';
-  }
-
-  return 'png';
-}
-
-function createScreenshotFilename(type) {
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const sourceSlug = createSourceSlug(sourceURL);
-  const prefix = sourceSlug ? `ripfullpage-${sourceSlug}` : 'ripfullpage';
-
-  return `${prefix}-${timestamp}.${getFileExtension(type)}`;
-}
-
-function createSourceSlug(url) {
-  if (!url) {
-    return '';
-  }
-
-  try {
-    const parsed = new URL(url);
-    const host = parsed.hostname.replace(/^www\./i, '');
-    const path = parsed.pathname
-      .split('/')
-      .filter(Boolean)
-      .slice(0, 3)
-      .join('-');
-
-    return sanitizeFilenamePart([host, path].filter(Boolean).join('-'));
-  } catch (_error) {
-    return sanitizeFilenamePart(url);
-  }
-}
-
-function sanitizeFilenamePart(value) {
-  return String(value)
-    .toLowerCase()
-    .replace(/^https?:\/\//, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 80);
-}
-
-async function writeImageToClipboard(blob) {
-  await navigator.clipboard.write([
-    new ClipboardItem({
-      [blob.type]: blob
-    })
-  ]);
-}
-
 async function downloadPdf() {
   const originalText = downloadPdfButton.textContent;
 
   try {
     downloadPdfButton.disabled = true;
-    downloadPdfButton.textContent = t('exporting');
+    downloadPdfButton.textContent = t("exporting");
 
-    const image = await loadImage(currentDataURL);
-    const pages = await createPdfImagePages(image);
-    const pdfBytes = buildPdfDocument(pages);
-    const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+    const blob = await createPdfBlob(currentDataURL);
     const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
+    const anchor = document.createElement("a");
 
     anchor.href = url;
-    anchor.download = createScreenshotFilename('application/pdf');
+    anchor.download = createScreenshotFilename("application/pdf", sourceURL);
     anchor.click();
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   } catch (error) {
-    console.error('[ripfullpage] PDF export failed:', error);
-    window.alert(t('pdfFailed'));
+    console.error("[ripfullpage] PDF export failed:", error);
+    window.alert(t("pdfFailed"));
   } finally {
     downloadPdfButton.textContent = originalText;
     downloadPdfButton.disabled = false;
   }
-}
-
-async function createPdfImagePages(image) {
-  const pageWidth = 595.28;
-  const pageHeight = 841.89;
-  const margin = 24;
-  const contentWidth = pageWidth - margin * 2;
-  const contentHeight = pageHeight - margin * 2;
-  const scale = contentWidth / image.naturalWidth;
-  const sliceHeight = Math.max(1, Math.floor(contentHeight / scale));
-  const pages = [];
-  const canvas = document.createElement('canvas');
-  const context = canvas.getContext('2d');
-
-  canvas.width = image.naturalWidth;
-
-  for (let y = 0; y < image.naturalHeight; y += sliceHeight) {
-    const currentSliceHeight = Math.min(sliceHeight, image.naturalHeight - y);
-    const drawHeight = currentSliceHeight * scale;
-    const imageY = pageHeight - margin - drawHeight;
-    const jpegDataURL = drawImageSliceToJpeg(
-      canvas,
-      context,
-      image,
-      y,
-      currentSliceHeight,
-    );
-
-    pages.push({
-      jpegBytes: dataURLToBytes(jpegDataURL),
-      pixelWidth: image.naturalWidth,
-      pixelHeight: currentSliceHeight,
-      pageWidth,
-      pageHeight,
-      drawX: margin,
-      drawY: imageY,
-      drawWidth: contentWidth,
-      drawHeight,
-    });
-
-    await waitForFrame();
-  }
-
-  return pages;
-}
-
-function drawImageSliceToJpeg(canvas, context, image, sourceY, sourceHeight) {
-  canvas.height = sourceHeight;
-  context.fillStyle = '#ffffff';
-  context.fillRect(0, 0, canvas.width, canvas.height);
-  context.drawImage(
-    image,
-    0,
-    sourceY,
-    image.naturalWidth,
-    sourceHeight,
-    0,
-    0,
-    canvas.width,
-    canvas.height
-  );
-
-  return canvas.toDataURL('image/jpeg', 0.92);
-}
-
-function buildPdfDocument(pages) {
-  const encoder = new TextEncoder();
-  const chunks = [];
-  const offsets = [];
-  let byteLength = 0;
-
-  const appendBytes = (bytes) => {
-    chunks.push(bytes);
-    byteLength += bytes.length;
-  };
-  const appendText = (text) => {
-    appendBytes(encoder.encode(text));
-  };
-  const addObject = (objectNumber, parts) => {
-    offsets[objectNumber] = byteLength;
-    appendText(`${objectNumber} 0 obj\n`);
-
-    for (const part of parts) {
-      if (typeof part === 'string') {
-        appendText(part);
-      } else {
-        appendBytes(part);
-      }
-    }
-
-    appendText('\nendobj\n');
-  };
-
-  appendText('%PDF-1.4\n');
-
-  const totalObjects = 2 + pages.length * 3;
-  const pageObjectNumbers = pages.map((_, index) => 3 + index * 3);
-  const kids = pageObjectNumbers.map((number) => `${number} 0 R`).join(' ');
-
-  addObject(1, ['<< /Type /Catalog /Pages 2 0 R >>']);
-  addObject(2, [`<< /Type /Pages /Kids [${kids}] /Count ${pages.length} >>`]);
-
-  pages.forEach((page, index) => {
-    const pageObjectNumber = 3 + index * 3;
-    const contentObjectNumber = pageObjectNumber + 1;
-    const imageObjectNumber = pageObjectNumber + 2;
-    const imageName = `Im${index + 1}`;
-    const content = [
-      'q',
-      `${formatPdfNumber(page.drawWidth)} 0 0 ${formatPdfNumber(page.drawHeight)} ${formatPdfNumber(page.drawX)} ${formatPdfNumber(page.drawY)} cm`,
-      `/${imageName} Do`,
-      'Q',
-    ].join('\n');
-    const contentLength = encoder.encode(content).length;
-
-    addObject(pageObjectNumber, [
-      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${formatPdfNumber(page.pageWidth)} ${formatPdfNumber(page.pageHeight)}] `,
-      `/Resources << /XObject << /${imageName} ${imageObjectNumber} 0 R >> >> `,
-      `/Contents ${contentObjectNumber} 0 R >>`,
-    ]);
-    addObject(contentObjectNumber, [
-      `<< /Length ${contentLength} >>\nstream\n`,
-      content,
-      '\nendstream',
-    ]);
-    addObject(imageObjectNumber, [
-      `<< /Type /XObject /Subtype /Image /Width ${page.pixelWidth} /Height ${page.pixelHeight} `,
-      `/ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${page.jpegBytes.length} >>\nstream\n`,
-      page.jpegBytes,
-      '\nendstream',
-    ]);
-  });
-
-  const xrefOffset = byteLength;
-
-  appendText(`xref\n0 ${totalObjects + 1}\n`);
-  appendText('0000000000 65535 f \n');
-
-  for (let objectNumber = 1; objectNumber <= totalObjects; objectNumber += 1) {
-    appendText(`${String(offsets[objectNumber]).padStart(10, '0')} 00000 n \n`);
-  }
-
-  appendText(
-    `trailer\n<< /Size ${totalObjects + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`,
-  );
-
-  return concatUint8Arrays(chunks, byteLength);
-}
-
-function dataURLToBytes(dataURL) {
-  const base64 = dataURL.split(',')[1];
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-
-  for (let index = 0; index < binary.length; index += 1) {
-    bytes[index] = binary.charCodeAt(index);
-  }
-
-  return bytes;
-}
-
-function concatUint8Arrays(chunks, totalLength) {
-  const output = new Uint8Array(totalLength);
-  let offset = 0;
-
-  for (const chunk of chunks) {
-    output.set(chunk, offset);
-    offset += chunk.length;
-  }
-
-  return output;
-}
-
-function formatPdfNumber(value) {
-  return Number(value.toFixed(3)).toString();
-}
-
-function waitForFrame() {
-  return new Promise((resolve) => {
-    requestAnimationFrame(resolve);
-  });
 }
 
 function readFileAsDataURL(file) {
@@ -1765,58 +1056,6 @@ function getRenderedImageRect() {
   };
 }
 
-function getLocalPoint(event, imageRect) {
-  return {
-    x: clamp(event.clientX - imageRect.left, 0, imageRect.width),
-    y: clamp(event.clientY - imageRect.top, 0, imageRect.height)
-  };
-}
-
-function pointInRect(point, rect) {
-  return (
-    rect &&
-    point.x >= rect.left &&
-    point.x <= rect.left + rect.width &&
-    point.y >= rect.top &&
-    point.y <= rect.top + rect.height
-  );
-}
-
-function scalePoint(point, scaleX, scaleY) {
-  return {
-    x: point.x * scaleX,
-    y: point.y * scaleY
-  };
-}
-
-function makeRect(x1, y1, x2, y2) {
-  const left = Math.min(x1, x2);
-  const top = Math.min(y1, y2);
-  const right = Math.max(x1, x2);
-  const bottom = Math.max(y1, y2);
-
-  return {
-    left,
-    top,
-    width: right - left,
-    height: bottom - top
-  };
-}
-
-function clampRectToCanvas(rect, canvas) {
-  const left = clamp(rect.left, 0, canvas.width);
-  const top = clamp(rect.top, 0, canvas.height);
-  const right = clamp(rect.left + rect.width, 0, canvas.width);
-  const bottom = clamp(rect.top + rect.height, 0, canvas.height);
-
-  return {
-    left,
-    top,
-    width: Math.max(0, right - left),
-    height: Math.max(0, bottom - top)
-  };
-}
-
 function clearEditCanvas() {
   editContext.clearRect(0, 0, editCanvas.width, editCanvas.height);
 }
@@ -1848,7 +1087,7 @@ async function persistCurrentImage() {
       sourceURL,
       createdAt: Date.now()
     },
-    'ripfullpage:lastSourceURL': sourceURL
+    [LAST_SOURCE_URL_KEY]: sourceURL
   });
 }
 

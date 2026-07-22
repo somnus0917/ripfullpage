@@ -87,11 +87,16 @@ flowchart TD
 │   ├── icon16.png
 │   ├── icon48.png
 │   └── icon128.png
+├── shared/
+│   └── constants.js           # 跨页面共享的存储键
 ├── background/
 │   └── service_worker.js
 ├── content/
-│   ├── content_runtime.js     # content script 的翻译、toast、倒计时和等待工具
-│   ├── content_script.js      # 截图流程、滚动拼接、选区和页面清理
+│   ├── content_runtime.js     # 翻译、toast、倒计时和等待工具
+│   ├── content_selection.js   # 选区 UI 与滚动区域识别
+│   ├── content_page_cleanup.js # 浮层、广告与聊天输入框清理
+│   ├── content_capture.js     # 滚动、分块截图与图片拼接
+│   ├── content_script.js      # 截图命令入口与错误处理
 │   └── content_style.css
 ├── popup/
 │   ├── popup.html
@@ -99,7 +104,11 @@ flowchart TD
 │   └── popup.css
 ├── editor/
 │   ├── editor.html
-│   ├── editor.js
+│   ├── editor.js              # 编辑器状态与事件调度
+│   ├── editor_geometry.js     # 坐标与裁剪计算
+│   ├── editor_drawing.js      # 标注、隐私工具与 WASM 回退
+│   ├── editor_watermark.js    # 水印绘制
+│   ├── editor_export.js       # 图片、剪贴板与 PDF 导出
 │   ├── editor.css
 │   └── wasm_core.js
 ├── rust-core/                 # Rust/WASM 图像处理核心源码
@@ -113,7 +122,7 @@ flowchart TD
 - 原生 JavaScript / HTML / CSS
 - Rust + WebAssembly 加速部分编辑能力，失败时回退到 Canvas 实现
 - 无前端框架或打包工具，商店包直接由运行时文件组成
-- 按需注入 content runtime 和 content script
+- 按需注入拆分后的 content runtime、选区、页面清理和截图流程模块
 - 使用 `chrome.tabs.captureVisibleTab` 截图
 - 使用 `chrome.storage.session` 在截图流程和编辑器之间传递图片数据
 - 使用 `chrome.storage.local` 保存最近截图历史
