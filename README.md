@@ -105,6 +105,7 @@ flowchart TD
 ├── editor/
 │   ├── editor.html
 │   ├── editor.js              # 编辑器状态与事件调度
+│   ├── editor_bootstrap.js    # 启动错误和超时处理
 │   ├── editor_geometry.js     # 坐标与裁剪计算
 │   ├── editor_drawing.js      # 标注、隐私工具与 WASM 回退
 │   ├── editor_watermark.js    # 水印绘制

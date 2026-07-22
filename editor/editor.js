@@ -61,6 +61,7 @@ const TRANSLATIONS = {
     applyWatermark: '应用水印',
     cancel: '取消',
     loadingScreenshot: '正在载入截图...',
+    loadScreenshotFailed: '载入截图失败',
     noScreenshotData: '没有找到截图数据',
     textPrompt: '输入文字',
     clipboardUnsupported: '当前浏览器不支持图片剪贴板。',
@@ -123,6 +124,7 @@ const TRANSLATIONS = {
     applyWatermark: 'Apply watermark',
     cancel: 'Cancel',
     loadingScreenshot: 'Loading screenshot...',
+    loadScreenshotFailed: 'Could not load screenshot',
     noScreenshotData: 'No screenshot data found',
     textPrompt: 'Enter text',
     clipboardUnsupported: 'This browser does not support image clipboard access.',
@@ -223,7 +225,7 @@ let watermarkColor = '#ffffff';
 let appliedWatermarkState = null;
 let currentLanguage = DEFAULT_LANGUAGE;
 
-init();
+init().catch(handleInitializationError);
 
 for (const button of languageButtons) {
   button.addEventListener('click', () => {
@@ -247,6 +249,7 @@ async function init() {
   if (!item || !item.dataURL) {
     imageMeta.textContent = t('noScreenshotData');
     setButtonsEnabled(false);
+    window.ripfullpageEditorBootstrap?.markReady();
     return;
   }
 
@@ -256,10 +259,20 @@ async function init() {
   watermarkTextInput.value = sourceURL;
   historyStack = [currentDataURL];
 
-  bindEvents();
   await loadPreview(currentDataURL);
+  bindEvents();
   setActiveTool(activeTool);
   updateHistoryButtons();
+  window.ripfullpageEditorBootstrap?.markReady();
+}
+
+function handleInitializationError(error) {
+  const detail = error && error.message ? error.message : String(error);
+  const message = t('loadScreenshotFailed') + '：' + detail;
+
+  console.error('[ripfullpage] Editor initialization failed:', error);
+  setButtonsEnabled(false);
+  window.ripfullpageEditorBootstrap?.fail(error, message);
 }
 
 async function loadLanguage() {
