@@ -8,7 +8,6 @@ const {
 } = window.ripfullpageConstants;
 const MIN_CROP_SIZE = 20;
 const MAX_HISTORY = 30;
-const WATERMARK_PADDING = 16;
 const DEFAULT_LANGUAGE = 'zh_CN';
 const TRANSLATIONS = {
   zh_CN: {
@@ -60,6 +59,7 @@ const TRANSLATIONS = {
     gray: '灰色',
     red: '红色',
     applyWatermark: '应用水印',
+    watermarkFailed: '应用水印失败',
     cancel: '取消',
     loadingScreenshot: '正在载入截图...',
     loadScreenshotFailed: '载入截图失败',
@@ -123,6 +123,7 @@ const TRANSLATIONS = {
     gray: 'Gray',
     red: 'Red',
     applyWatermark: 'Apply watermark',
+    watermarkFailed: 'Could not apply watermark',
     cancel: 'Cancel',
     loadingScreenshot: 'Loading screenshot...',
     loadScreenshotFailed: 'Could not load screenshot',
@@ -363,7 +364,9 @@ function bindEvents() {
   redoButton.addEventListener('click', redoEdit);
   stickerInput.addEventListener('change', insertStickerFromInput);
   privacyStrengthInput.addEventListener('input', updatePrivacyControls);
-  applyWatermarkButton.addEventListener('click', applyWatermark);
+  applyWatermarkButton.addEventListener('click', () => {
+    applyWatermark().catch(handleWatermarkError);
+  });
   cancelWatermarkButton.addEventListener('click', hideWatermarkPanel);
   watermarkPanel.addEventListener('pointerdown', (event) => event.stopPropagation());
 
@@ -913,6 +916,13 @@ async function applyWatermark() {
   await persistCurrentImage();
   await loadPreview(currentDataURL);
   hideWatermarkPanel();
+}
+
+function handleWatermarkError(error) {
+  const detail = error && error.message ? error.message : String(error);
+
+  console.error('[ripfullpage] Watermark failed:', error);
+  imageMeta.textContent = t('watermarkFailed') + '：' + detail;
 }
 
 function canReplaceEditableWatermark() {

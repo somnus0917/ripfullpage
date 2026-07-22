@@ -1,5 +1,7 @@
 // Watermark rendering primitives for the editor.
 (() => {
+  const WATERMARK_PADDING = 16;
+
 function drawWatermark(context, options) {
   const padding = WATERMARK_PADDING;
   const fontSize = clamp(options.fontSize || 16, 12, 36);
@@ -117,6 +119,10 @@ function getWatermarkBackdropColor(color, opacity) {
     ? `rgba(255, 255, 255, ${Math.min(0.38, opacity * 0.36)})`
     : `rgba(2, 6, 23, ${Math.min(0.46, opacity * 0.42)})`;
 }
+
+  function clamp(value, min, max) {
+    return Math.min(max, Math.max(min, value));
+  }
 
   window.ripfullpageEditorWatermark = Object.freeze({
     drawWatermark,
