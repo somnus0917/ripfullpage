@@ -122,7 +122,7 @@ async function ensureContentScript(tabId) {
 
   await chrome.scripting.executeScript({
     target: { tabId },
-    files: ['content/content_script.js']
+    files: ['content/content_runtime.js', 'content/content_script.js']
   });
 }
 

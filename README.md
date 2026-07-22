@@ -90,24 +90,30 @@ flowchart TD
 ├── background/
 │   └── service_worker.js
 ├── content/
-│   ├── content_script.js
+│   ├── content_runtime.js     # content script 的翻译、toast、倒计时和等待工具
+│   ├── content_script.js      # 截图流程、滚动拼接、选区和页面清理
 │   └── content_style.css
 ├── popup/
 │   ├── popup.html
 │   ├── popup.js
 │   └── popup.css
-└── editor/
-    ├── editor.html
-    ├── editor.js
-    └── editor.css
+├── editor/
+│   ├── editor.html
+│   ├── editor.js
+│   ├── editor.css
+│   └── wasm_core.js
+├── rust-core/                 # Rust/WASM 图像处理核心源码
+└── wasm/
+    └── ripfullpage_core.wasm
 ```
 
 ## 技术说明
 
 - Manifest V3
 - 原生 JavaScript / HTML / CSS
-- 无第三方依赖
-- 按需注入 content script
+- Rust + WebAssembly 加速部分编辑能力，失败时回退到 Canvas 实现
+- 无前端框架或打包工具，商店包直接由运行时文件组成
+- 按需注入 content runtime 和 content script
 - 使用 `chrome.tabs.captureVisibleTab` 截图
 - 使用 `chrome.storage.session` 在截图流程和编辑器之间传递图片数据
 - 使用 `chrome.storage.local` 保存最近截图历史

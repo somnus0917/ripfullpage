@@ -185,6 +185,7 @@ let redoStack = [];
 let pendingStickerPoint = null;
 let watermarkPosition = 'bottom-right';
 let watermarkColor = '#ffffff';
+let appliedWatermarkState = null;
 let currentLanguage = DEFAULT_LANGUAGE;
 
 init();
@@ -679,6 +680,7 @@ async function commitEditState(state) {
   }
 
   currentDataURL = canvas.toDataURL('image/png');
+  clearEditableWatermarkState();
   pushHistory(currentDataURL);
   await persistCurrentImage();
   await loadPreview(currentDataURL);
@@ -1071,6 +1073,7 @@ async function applyCrop() {
     currentDataURL = targetCanvas.toDataURL('image/png');
   }
 
+  clearEditableWatermarkState();
   pushHistory(currentDataURL);
   await persistCurrentImage();
   await loadPreview(currentDataURL);
@@ -1080,6 +1083,7 @@ async function resetImage() {
   currentDataURL = originalDataURL;
   historyStack = [currentDataURL];
   redoStack = [];
+  clearEditableWatermarkState();
   await persistCurrentImage();
   await loadPreview(currentDataURL);
   updateHistoryButtons();
@@ -1167,28 +1171,50 @@ async function applyWatermark() {
     return;
   }
 
-  const image = await loadImage(currentDataURL);
+  const canReplaceWatermark = canReplaceEditableWatermark();
+  const baseDataURL = canReplaceWatermark
+    ? appliedWatermarkState.baseDataURL
+    : currentDataURL;
+  const image = await loadImage(baseDataURL);
   const canvas = document.createElement('canvas');
   const context = canvas.getContext('2d');
-
-  canvas.width = image.naturalWidth;
-  canvas.height = image.naturalHeight;
-  context.drawImage(image, 0, 0);
-
-  // 水印直接绘制进主图，确保导出、复制、撤销/重做都走同一份图片状态。
-  drawWatermark(context, {
+  const options = {
     text,
     position: watermarkPosition,
     color: watermarkColor,
     fontSize: Number(watermarkFontSizeInput.value),
     opacity: Number(watermarkOpacityInput.value) / 100
-  });
+  };
+
+  canvas.width = image.naturalWidth;
+  canvas.height = image.naturalHeight;
+  context.drawImage(image, 0, 0);
+
+  // 最近一次水印保留底图，重复应用时替换水印而不是继续叠加。
+  drawWatermark(context, options);
 
   currentDataURL = canvas.toDataURL('image/png');
-  pushHistory(currentDataURL);
+  appliedWatermarkState = {
+    baseDataURL,
+    resultDataURL: currentDataURL,
+    options
+  };
+  pushHistory(currentDataURL, { replaceCurrent: canReplaceWatermark });
   await persistCurrentImage();
   await loadPreview(currentDataURL);
   hideWatermarkPanel();
+}
+
+function canReplaceEditableWatermark() {
+  return (
+    appliedWatermarkState &&
+    appliedWatermarkState.resultDataURL === currentDataURL &&
+    historyStack[historyStack.length - 1] === currentDataURL
+  );
+}
+
+function clearEditableWatermarkState() {
+  appliedWatermarkState = null;
 }
 
 function drawWatermark(context, options) {
@@ -1334,10 +1360,7 @@ async function copyImageToClipboard() {
     copyButton.textContent = t('copying');
     const type = 'image/png';
     const blob = await createOutputBlob(type);
-    const filename = createScreenshotFilename(type);
-    const file = new File([blob], filename, { type: blob.type });
-
-    await writeNamedImageToClipboard(file, filename);
+    await writeImageToClipboard(blob);
     copyButton.textContent = t('copied');
     window.setTimeout(() => {
       copyButton.textContent = originalText;
@@ -1480,51 +1503,12 @@ function sanitizeFilenamePart(value) {
     .slice(0, 80);
 }
 
-async function writeNamedImageToClipboard(file, filename) {
-  const dataURL = await blobToDataURL(file);
-  const escapedFilename = escapeHtml(filename);
-  const html = `<img src="${dataURL}" alt="${escapedFilename}" download="${escapedFilename}">`;
-
-  try {
-    await navigator.clipboard.write([
-      new ClipboardItem({
-        [file.type]: file,
-        'text/html': new Blob([html], { type: 'text/html' }),
-        'text/plain': new Blob([filename], { type: 'text/plain' })
-      })
-    ]);
-  } catch (error) {
-    console.warn('[ripfullpage] Named clipboard write failed, falling back to image only:', error);
-    await navigator.clipboard.write([
-      new ClipboardItem({
-        [file.type]: file
-      })
-    ]);
-  }
-}
-
-function blobToDataURL(blob) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = () => reject(new Error('Could not read image blob.'));
-    reader.readAsDataURL(blob);
-  });
-}
-
-function escapeHtml(value) {
-  return String(value).replace(/[&<>"']/g, (char) => {
-    const entities = {
-      '&': '&amp;',
-      '<': '&lt;',
-      '>': '&gt;',
-      '"': '&quot;',
-      "'": '&#39;'
-    };
-
-    return entities[char];
-  });
+async function writeImageToClipboard(blob) {
+  await navigator.clipboard.write([
+    new ClipboardItem({
+      [blob.type]: blob
+    })
+  ]);
 }
 
 async function downloadPdf() {
@@ -1837,8 +1821,12 @@ function clearEditCanvas() {
   editContext.clearRect(0, 0, editCanvas.width, editCanvas.height);
 }
 
-function pushHistory(dataURL) {
-  historyStack.push(dataURL);
+function pushHistory(dataURL, options = {}) {
+  if (options.replaceCurrent && historyStack.length) {
+    historyStack[historyStack.length - 1] = dataURL;
+  } else {
+    historyStack.push(dataURL);
+  }
 
   if (historyStack.length > MAX_HISTORY) {
     historyStack.shift();
